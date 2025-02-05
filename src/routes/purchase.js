@@ -5,15 +5,14 @@ import { PrismaClient } from '@prisma/client';
 const router = Router();
 const prisma = new PrismaClient();
 
-const generateBatchNumber = (cws, grade) => {
-  const now = new Date();
+const generateBatchNumber = (cws, grade, purchaseDate) => {
+  const now = new Date(purchaseDate);
   const year = now.getFullYear().toString().slice(-2);
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  
+
   return `${year}${cws.code}${day}${month}${grade}`;
 };
-
 
 router.post('/', async (req, res) => {
   const {
@@ -23,11 +22,10 @@ router.post('/', async (req, res) => {
     grade,
     cwsId,
     siteCollectionId,
-    purchaseDate  // Added purchaseDate
+    purchaseDate
   } = req.body;
 
   try {
-    // Fetch CWS to get the code for batch number generation
     const cws = await prisma.cWS.findUnique({
       where: { id: cwsId }
     });
@@ -36,7 +34,7 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'CWS not found' });
     }
 
-    const batchNo = generateBatchNumber(cws, grade);
+    const batchNo = generateBatchNumber(cws, grade, purchaseDate);
 
     const purchase = await prisma.purchase.create({
       data: {
@@ -47,7 +45,7 @@ router.post('/', async (req, res) => {
         cwsId,
         siteCollectionId,
         batchNo,
-        purchaseDate: new Date(purchaseDate)  // Convert to Date object
+        purchaseDate: new Date(purchaseDate)
       },
       include: {
         cws: true,
