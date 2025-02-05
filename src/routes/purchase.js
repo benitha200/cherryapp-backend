@@ -14,52 +14,6 @@ const generateBatchNumber = (cws, grade) => {
   return `${year}${cws.code}${day}${month}${grade}`;
 };
 
-// with purchase date
-// router.post('/', async (req, res) => {
-//   const { 
-//     deliveryType, 
-//     totalKgs, 
-//     totalPrice, 
-//     grade, 
-//     cwsId, 
-//     siteCollectionId
-//   } = req.body;
-
-//   try {
-//     // Fetch CWS to get the code for batch number generation
-//     const cws = await prisma.cWS.findUnique({
-//       where: { id: cwsId }
-//     });
-
-//     if (!cws) {
-//       return res.status(404).json({ error: 'CWS not found' });
-//     }
-
-//     const batchNo = generateBatchNumber(cws, grade);
-//     const purchaseDate = new Date();
-
-//     const purchase = await prisma.purchase.create({
-//       data: {
-//         deliveryType,
-//         totalKgs,
-//         totalPrice,
-//         grade,
-//         cwsId,
-//         siteCollectionId,
-//         batchNo,
-//         purchaseDate
-//       },
-//       include: {
-//         cws: true,
-//         siteCollection: true
-//       }
-//     });
-
-//     res.json(purchase);
-//   } catch (error) {
-//     res.status(400).json({ error: error.message });
-//   }
-// });
 
 router.post('/', async (req, res) => {
   const {
