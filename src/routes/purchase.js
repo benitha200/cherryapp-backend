@@ -14,11 +14,30 @@ const generateBatchNumber = (cws, grade) => {
   return `${year}${cws.code}${day}${month}${grade}`;
 };
 
-// Create purchase
+// with purchase date
 // router.post('/', async (req, res) => {
-//   const { deliveryType, totalKgs, totalPrice, grade, cwsId, siteCollectionId } = req.body;
+//   const { 
+//     deliveryType, 
+//     totalKgs, 
+//     totalPrice, 
+//     grade, 
+//     cwsId, 
+//     siteCollectionId
+//   } = req.body;
 
 //   try {
+//     // Fetch CWS to get the code for batch number generation
+//     const cws = await prisma.cWS.findUnique({
+//       where: { id: cwsId }
+//     });
+
+//     if (!cws) {
+//       return res.status(404).json({ error: 'CWS not found' });
+//     }
+
+//     const batchNo = generateBatchNumber(cws, grade);
+//     const purchaseDate = new Date();
+
 //     const purchase = await prisma.purchase.create({
 //       data: {
 //         deliveryType,
@@ -26,7 +45,9 @@ const generateBatchNumber = (cws, grade) => {
 //         totalPrice,
 //         grade,
 //         cwsId,
-//         siteCollectionId // This will be undefined for DIRECT_DELIVERY
+//         siteCollectionId,
+//         batchNo,
+//         purchaseDate
 //       },
 //       include: {
 //         cws: true,
@@ -41,13 +62,14 @@ const generateBatchNumber = (cws, grade) => {
 // });
 
 router.post('/', async (req, res) => {
-  const { 
-    deliveryType, 
-    totalKgs, 
-    totalPrice, 
-    grade, 
-    cwsId, 
-    siteCollectionId 
+  const {
+    deliveryType,
+    totalKgs,
+    totalPrice,
+    grade,
+    cwsId,
+    siteCollectionId,
+    purchaseDate  // Added purchaseDate
   } = req.body;
 
   try {
@@ -61,7 +83,6 @@ router.post('/', async (req, res) => {
     }
 
     const batchNo = generateBatchNumber(cws, grade);
-    const purchaseDate = new Date();
 
     const purchase = await prisma.purchase.create({
       data: {
@@ -72,7 +93,7 @@ router.post('/', async (req, res) => {
         cwsId,
         siteCollectionId,
         batchNo,
-        purchaseDate
+        purchaseDate: new Date(purchaseDate)  // Convert to Date object
       },
       include: {
         cws: true,
@@ -169,27 +190,7 @@ router.get('/grouped', async (req, res) => {
   }
 });
 
-// Endpoint for daily purchase details
-// router.get('/date/:date', async (req, res) => {
-//   const { date } = req.params;
-//   try {
-//     const purchases = await prisma.purchase.findMany({
-//       where: { 
-//         purchaseDate: {
-//           gte: new Date(date),
-//           lt: new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000)
-//         }
-//       },
-//       include: { 
-//         cws: true, 
-//         siteCollection: true 
-//       }
-//     });
-//     res.json(purchases);
-//   } catch (error) {
-//     res.status(400).json({ error: error.message });
-//   }
-// });
+
 
 
 router.get('/date/:date', async (req, res) => {
