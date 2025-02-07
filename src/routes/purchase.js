@@ -66,9 +66,12 @@ router.get('/', async (req, res) => {
       include: {
         cws: true,
         siteCollection: true
+      },
+      orderBy: {
+        id: 'desc'
       }
     });
-
+    
     res.json(purchases);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -87,6 +90,9 @@ router.get('/cws/:cwsId', async (req, res) => {
       include: {
         cws: true,
         siteCollection: true
+      },
+      orderBy: {
+        id: 'desc'
       }
     });
 

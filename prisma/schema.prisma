@@ -43,6 +43,7 @@ model CWS {
   users           User[]
   purchases       Purchase[]
   siteCollections SiteCollection[]
+  processing Processing[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -71,4 +72,35 @@ model SiteCollection {
   purchases   Purchase[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+}
+
+model Processing {
+  id             Int             @id @default(autoincrement())
+  batchNo        String
+  processingType String
+  totalKgs       Float
+  grade          GradeType
+  startDate      DateTime        @default(now())
+  endDate        DateTime?
+  status         String @default("PENDING")
+  notes          String?
+  cws            CWS             @relation(fields: [cwsId], references: [id])
+  cwsId          Int
+  baggingOffs   BaggingOff[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model BaggingOff {
+id            Int      @id @default(autoincrement())
+batchNo       String
+processingId  Int
+processing    Processing @relation(fields: [processingId], references: [id])
+date          DateTime
+outputKgs     Json     // Storing A0, A1, A2, A3 as JSON
+totalOutputKgs Float
+status        String   @default("COMPLETED")
+notes         String?
+createdAt     DateTime @default(now())
+updatedAt     DateTime @updatedAt
 }
