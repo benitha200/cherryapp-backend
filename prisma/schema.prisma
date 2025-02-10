@@ -92,15 +92,28 @@ model Processing {
 }
 
 model BaggingOff {
-id            Int      @id @default(autoincrement())
-batchNo       String
-processingId  Int
-processing    Processing @relation(fields: [processingId], references: [id])
-date          DateTime
-outputKgs     Json     // Storing A0, A1, A2, A3 as JSON
-totalOutputKgs Float
-status        String   @default("COMPLETED")
-notes         String?
-createdAt     DateTime @default(now())
-updatedAt     DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  batchNo       String
+  processingId  Int
+  processing    Processing @relation(fields: [processingId], references: [id])
+  date          DateTime
+  outputKgs     Json     // Storing available output kilograms as JSON
+  totalOutputKgs Float
+  status        String   @default("COMPLETED")
+  notes         String?
+  transfer      Transfer?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Transfer {
+  id            Int         @id @default(autoincrement())
+  batchNo       String
+  baggingOff    BaggingOff @relation(fields: [baggingOffId], references: [id])
+  baggingOffId  Int        @unique 
+  transferDate  DateTime    @default(now())
+  status        String     @default("COMPLETED")
+  notes         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }

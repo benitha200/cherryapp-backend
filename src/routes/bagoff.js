@@ -56,7 +56,6 @@ router.post('/', async (req, res) => {
       res.status(500).json({ error: 'Failed to process bagging off' });
     }
   });
-  
 router.get('/', async (req, res) => {
   try {
     const { batchNo, startDate, endDate } = req.query;
@@ -77,7 +76,8 @@ router.get('/', async (req, res) => {
           include: {
             cws: true
           }
-        }
+        },
+        transfer:true
       },
       orderBy: { createdAt: 'desc' }
     });

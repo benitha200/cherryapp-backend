@@ -7,6 +7,7 @@ import cwsRoutes from './src/routes/cws.js';
 import siteCollectionRoutes from './src/routes/siteCollection.js';
 import processingRoutes from './src/routes/processing.js'
 import BagOffRoutes from './src/routes/bagoff.js';
+import TransferRoutes from './src/routes/transfer.js';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -21,7 +22,7 @@ app.use('/api/cws', cwsRoutes);
 app.use('/api/site-collections', siteCollectionRoutes);
 app.use('/api/processing', processingRoutes);
 app.use('/api/bagging-off', BagOffRoutes);
-
+app.use('/api/transfer', TransferRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
