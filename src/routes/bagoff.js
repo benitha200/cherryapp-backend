@@ -56,36 +56,57 @@ router.post('/', async (req, res) => {
       res.status(500).json({ error: 'Failed to process bagging off' });
     }
   });
-router.get('/', async (req, res) => {
-  try {
-    const { batchNo, startDate, endDate } = req.query;
-    const where = {};
 
-    if (batchNo) where.batchNo = batchNo;
-    if (startDate && endDate) {
-      where.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate)
-      };
-    }
-
-    const baggingOffEntries = await prisma.baggingOff.findMany({
-      where,
-      include: {
-        processing: {
-          include: {
-            cws: true
-          }
+  router.get('/', async (req, res) => {
+    try {
+      const baggingOffEntries = await prisma.baggingOff.findMany({
+        include: {
+          processing: {
+            include: {
+              cws: true
+            }
+          },
+          transfers: true
         },
-        transfer:true
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+        orderBy: { createdAt: 'desc' }
+      });
+  
+      res.json(baggingOffEntries);
+    } catch (error) {
+      console.error('Error fetching bagging off entries:', error);
+      res.status(500).json({ error: 'Failed to retrieve bagging off entries' });
+    }
+  });
+// router.get('/', async (req, res) => {
+//   try {
+//     const { batchNo, startDate, endDate } = req.query;
+//     const where = {};
 
-    res.json(baggingOffEntries);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve bagging off entries' });
-  }
-});
+//     if (batchNo) where.batchNo = batchNo;
+//     if (startDate && endDate) {
+//       where.date = {
+//         gte: new Date(startDate),
+//         lte: new Date(endDate)
+//       };
+//     }
+
+//     const baggingOffEntries = await prisma.baggingOff.findMany({
+//       where,
+//       include: {
+//         processing: {
+//           include: {
+//             cws: true
+//           }
+//         },
+//         transfer:true
+//       },
+//       orderBy: { createdAt: 'desc' }
+//     });
+
+//     res.json(baggingOffEntries);
+//   } catch (error) {
+//     res.status(500).json({ error: 'Failed to retrieve bagging off entries' });
+//   }
+// });
 
 export default router;
