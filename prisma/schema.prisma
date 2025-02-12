@@ -44,6 +44,7 @@ model CWS {
   purchases       Purchase[]
   siteCollections SiteCollection[]
   processing Processing[]
+  pricing         CWSPricing[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -52,7 +53,10 @@ model Purchase {
   id            Int          @id @default(autoincrement())
   deliveryType  DeliveryType
   totalKgs      Float
-  totalPrice    Float
+  totalPrice       Float
+  cherryPrice      Float        // Added field
+  transportFee     Float        // Added field
+  commissionFee    Float
   grade         GradeType
   cws           CWS          @relation(fields: [cwsId], references: [id])
   cwsId         Int
@@ -70,6 +74,7 @@ model SiteCollection {
   cws         CWS        @relation(fields: [cwsId], references: [id])
   cwsId       Int
   purchases   Purchase[]
+  fees            SiteCollectionFees[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -116,4 +121,31 @@ model Transfer {
   notes         String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+}
+
+model GlobalFees {
+  id                Int      @id @default(autoincrement())
+  commissionFee    Float    // Global commission fee for site collections
+  transportFee     Float    // Default transport fee for direct delivery and supplier
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model CWSPricing {
+  id            Int      @id @default(autoincrement())
+  cws           CWS      @relation(fields: [cwsId], references: [id])
+  cwsId         Int
+  gradeAPrice   Float    // Cherry A price for this CWS
+  transportFee  Float    // Transport fee for direct delivery and supplier at this CWS
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SiteCollectionFees {
+  id              Int            @id @default(autoincrement())
+  siteCollection  SiteCollection @relation(fields: [siteCollectionId], references: [id])
+  siteCollectionId Int
+  transportFee    Float          // Transport fee for this specific site
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
