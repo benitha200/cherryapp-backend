@@ -1,3 +1,69 @@
+// import { Router } from 'express';
+// import { PrismaClient } from '@prisma/client';
+
+// const router = Router();
+// const prisma = new PrismaClient();
+
+// const generateBatchNumber = (cws, grade, purchaseDate) => {
+//   const now = new Date(purchaseDate);
+//   const year = now.getFullYear().toString().slice(-2);
+//   const month = String(now.getMonth() + 1).padStart(2, '0');
+//   const day = String(now.getDate()).padStart(2, '0');
+
+//   return `${year}${cws.code}${day}${month}${grade}`;
+// };
+
+// router.post('/', async (req, res) => {
+//   const {
+//     deliveryType,
+//     totalKgs,
+//     totalPrice,
+//     cherryPrice,    // New field
+//     transportFee,   // New field
+//     commissionFee,  // New field
+//     grade,
+//     cwsId,
+//     siteCollectionId,
+//     purchaseDate
+//   } = req.body;
+
+//   try {
+//     const cws = await prisma.cWS.findUnique({
+//       where: { id: cwsId }
+//     });
+
+//     if (!cws) {
+//       return res.status(404).json({ error: 'CWS not found' });
+//     }
+
+//     const batchNo = generateBatchNumber(cws, grade, purchaseDate);
+
+//     const purchase = await prisma.purchase.create({
+//       data: {
+//         deliveryType,
+//         totalKgs,
+//         totalPrice,
+//         cherryPrice,    // Store cherry price
+//         transportFee,   // Store transport fee
+//         commissionFee,  // Store commission fee
+//         grade,
+//         cwsId,
+//         siteCollectionId: deliveryType === 'SITE_COLLECTION' ? siteCollectionId : null,
+//         batchNo,
+//         purchaseDate: new Date(purchaseDate)
+//       },
+//       include: {
+//         cws: true,
+//         siteCollection: true
+//       }
+//     });
+
+//     res.json(purchase);
+//   } catch (error) {
+//     res.status(400).json({ error: error.message });
+//   }
+// });
+
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 
@@ -13,14 +79,70 @@ const generateBatchNumber = (cws, grade, purchaseDate) => {
   return `${year}${cws.code}${day}${month}${grade}`;
 };
 
+// Helper function to check if processing has started for a specific date
+const hasProcessingStarted = async (cwsId, purchaseDate) => {
+  const purchaseDateObj = new Date(purchaseDate);
+  purchaseDateObj.setUTCHours(0, 0, 0, 0);
+  
+  const purchaseEndDate = new Date(purchaseDate);
+  purchaseEndDate.setUTCHours(23, 59, 59, 999);
+
+  const processingEntries = await prisma.processing.findMany({
+    where: {
+      cwsId: cwsId,
+      OR: [
+        {
+          startDate: {
+            gte: purchaseDateObj,
+            lte: purchaseEndDate
+          }
+        },
+        {
+          startDate: {
+            gte: purchaseDateObj
+          }
+        }
+      ],
+      status: {
+        in: ['IN_PROGRESS', 'COMPLETED']
+      }
+    }
+  });
+
+  const matchingEntries = processingEntries.filter(entry => {
+    const processingDate = new Date(entry.startDate);
+    return (
+      processingDate.getUTCFullYear() === purchaseDateObj.getUTCFullYear() &&
+      processingDate.getUTCMonth() === purchaseDateObj.getUTCMonth() &&
+      processingDate.getUTCDate() === purchaseDateObj.getUTCDate()
+    );
+  });
+
+  return matchingEntries.length > 0;
+};
+
+// Helper function to check if batch is already in processing
+const isBatchInProcessing = async (batchNo) => {
+  const processingEntry = await prisma.processing.findFirst({
+    where: {
+      batchNo: batchNo,
+      status: {
+        in: ['IN_PROGRESS', 'COMPLETED']
+      }
+    }
+  });
+
+  return processingEntry !== null;
+};
+
 router.post('/', async (req, res) => {
   const {
     deliveryType,
     totalKgs,
     totalPrice,
-    cherryPrice,    // New field
-    transportFee,   // New field
-    commissionFee,  // New field
+    cherryPrice,
+    transportFee,
+    commissionFee,
     grade,
     cwsId,
     siteCollectionId,
@@ -33,24 +155,73 @@ router.post('/', async (req, res) => {
     });
 
     if (!cws) {
-      return res.status(404).json({ error: 'CWS not found' });
+      return res.status(404).json({ 
+        error: 'CWS not found' 
+      });
+    }
+
+    if (!purchaseDate || isNaN(new Date(purchaseDate).getTime())) {
+      return res.status(400).json({
+        error: 'Invalid purchase date format'
+      });
+    }
+
+    const processingStarted = await hasProcessingStarted(cwsId, purchaseDate);
+    if (processingStarted) {
+      return res.status(400).json({
+        error: 'Cannot add purchase. Processing has already started for cherries from this date.'
+      });
     }
 
     const batchNo = generateBatchNumber(cws, grade, purchaseDate);
+
+    // Check if the batch is already in processing
+    const batchInProcessing = await isBatchInProcessing(batchNo);
+    if (batchInProcessing) {
+      return res.status(400).json({
+        error: 'That batch is already in processing, you can\'t add other purchases'
+      });
+    }
+
+    const purchaseDateTime = new Date(purchaseDate);
+    purchaseDateTime.setUTCHours(0, 0, 0, 0);
+
+    const existingPurchase = await prisma.purchase.findFirst({
+      where: {
+        cwsId,
+        grade,
+        purchaseDate: {
+          gte: purchaseDateTime,
+          lt: new Date(purchaseDateTime.getTime() + 24 * 60 * 60 * 1000)
+        },
+        ...(deliveryType === 'SITE_COLLECTION' 
+          ? { siteCollectionId }
+          : { deliveryType }
+        )
+      }
+    });
+
+    if (existingPurchase) {
+      const errorMessage = deliveryType === 'SITE_COLLECTION'
+        ? 'A purchase for this site and grade already exists for this date'
+        : `A ${deliveryType.toLowerCase()} purchase for this grade already exists for this date`;
+      
+      return res.status(400).json({ error: errorMessage });
+    }
 
     const purchase = await prisma.purchase.create({
       data: {
         deliveryType,
         totalKgs,
         totalPrice,
-        cherryPrice,    // Store cherry price
-        transportFee,   // Store transport fee
-        commissionFee,  // Store commission fee
+        cherryPrice,
+        transportFee,
+        commissionFee,
         grade,
         cwsId,
         siteCollectionId: deliveryType === 'SITE_COLLECTION' ? siteCollectionId : null,
         batchNo,
-        purchaseDate: new Date(purchaseDate)
+        purchaseDate: purchaseDateTime
       },
       include: {
         cws: true,
@@ -63,8 +234,6 @@ router.post('/', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
-
-
 // Get all purchases
 router.get('/', async (req, res) => {
   try {
