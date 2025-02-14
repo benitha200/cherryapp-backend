@@ -196,6 +196,51 @@ router.post('/register', async (req, res) => {
 });
 
 // Enhanced User Login with CWS details
+
+
+// router.post('/login', async (req, res) => {
+//   const { username, password } = req.body;
+
+//   try {
+//     const user = await prisma.user.findUnique({
+//       where: { username },
+//       include: {
+//         cws: true,
+//       }
+//     });
+
+//     if (!user) {
+//       return res.status(401).json({ error: 'Invalid username or password' });
+//     }
+
+//     const isMatch = await bcrypt.compare(password, user.password);
+//     if (!isMatch) {
+//       return res.status(401).json({ error: 'Invalid username or password' });
+//     }
+
+//     const token = jwt.sign(
+//       { userId: user.id, username: user.username, role: user.role },
+//       process.env.JWT_SECRET,
+//       { expiresIn: '1d' }
+//     );
+
+//     const userResponse = {
+//       token,
+//       user: {
+//         id: user.id,
+//         username: user.username,
+//         role: user.role,
+//         cwsId: user.cwsId,
+//       },
+//       cws: user.cws
+//     };
+
+//     res.json(userResponse);
+//   } catch (error) {
+//     res.status(400).json({ error: error.message });
+//   }
+// });
+
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -203,7 +248,16 @@ router.post('/login', async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { username },
       include: {
-        cws: true,
+        cws: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            location: true,
+            havespeciality: true,
+            // Include other CWS fields you need
+          }
+        }
       }
     });
 

@@ -7,11 +7,16 @@ const prisma = new PrismaClient();
 
 // Create a new CWS
 router.post('/', async (req, res) => {
-  const { name, location,code } = req.body;
+  const { name, location, code, havespeciality } = req.body;
 
   try {
     const cws = await prisma.cWS.create({
-      data: { name, location,code },
+      data: { 
+        name, 
+        location, 
+        code,
+        havespeciality: havespeciality || false
+      },
     });
 
     res.json(cws);
@@ -54,12 +59,17 @@ router.get('/:id', async (req, res) => {
 // Update a CWS
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, location,code } = req.body;
+  const { name, location, code, havespeciality } = req.body;
 
   try {
     const cws = await prisma.cWS.update({
       where: { id: parseInt(id) },
-      data: { name, location,code },
+      data: { 
+        name, 
+        location, 
+        code,
+        ...(havespeciality !== undefined ? { havespeciality } : {})
+      },
     });
 
     res.json(cws);
