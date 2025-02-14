@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
+enum UserRole {"px-4 py-3"
   ADMIN
   CWS_MANAGER
   SUPER_ADMIN
@@ -50,22 +50,22 @@ model CWS {
 }
 
 model Purchase {
-  id            Int          @id @default(autoincrement())
-  deliveryType  DeliveryType
-  totalKgs      Float
-  totalPrice       Float
-  cherryPrice      Float        // Added field
-  transportFee     Float        // Added field
-  commissionFee    Float
-  grade         GradeType
-  cws           CWS          @relation(fields: [cwsId], references: [id])
-  cwsId         Int
-  batchNo       String @default("24NYK2105CA")
-  purchaseDate  DateTime @default(now())
-  siteCollection SiteCollection? @relation(fields: [siteCollectionId], references: [id])
-  siteCollectionId Int?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                Int            @id @default(autoincrement())
+  deliveryType      DeliveryType
+  totalKgs          Float
+  totalPrice        Float
+  cherryPrice       Float
+  transportFee      Float
+  commissionFee     Float
+  grade             GradeType
+  cws               CWS            @relation(fields: [cwsId], references: [id])
+  cwsId             Int
+  batchNo           String         @default("24NYK2105CA")
+  purchaseDate      DateTime       @default(now())
+  siteCollection    SiteCollection? @relation(fields: [siteCollectionId], references: [id], onDelete: SetNull)
+  siteCollectionId  Int?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 }
 
 model SiteCollection {
@@ -74,7 +74,7 @@ model SiteCollection {
   cws         CWS        @relation(fields: [cwsId], references: [id])
   cwsId       Int
   purchases   Purchase[]
-  fees            SiteCollectionFees[]
+  fees        SiteCollectionFees[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -142,10 +142,10 @@ model CWSPricing {
 }
 
 model SiteCollectionFees {
-  id              Int            @id @default(autoincrement())
-  siteCollection  SiteCollection @relation(fields: [siteCollectionId], references: [id])
+  id               Int           @id @default(autoincrement())
+  siteCollection   SiteCollection @relation(fields: [siteCollectionId], references: [id], onDelete: Cascade)
   siteCollectionId Int
-  transportFee    Float          // Transport fee for this specific site
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  transportFee     Float
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 }
