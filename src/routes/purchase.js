@@ -302,6 +302,77 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Add this endpoint to your purchases router
+
+router.get('/cws-aggregated', async (req, res) => {
+  try {
+    // Calculate yesterday's date range
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setUTCHours(0, 0, 0, 0);
+    
+    const endOfYesterday = new Date(yesterday);
+    endOfYesterday.setUTCHours(23, 59, 59, 999);
+
+    const cwsData = await prisma.cWS.findMany({
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        purchases: {
+          where: {
+            purchaseDate: {
+              gte: yesterday,
+              lte: endOfYesterday
+            }
+          },
+          select: {
+            totalKgs: true,
+            cherryPrice: true,
+            transportFee: true,
+            commissionFee: true,
+            purchaseDate: true
+          }
+        }
+      }
+    });
+
+    const aggregatedData = cwsData.map(cws => {
+      // Initialize aggregation values
+      const aggregation = {
+        cwsId: cws.id,
+        cwsName: cws.name,
+        cwsCode: cws.code,
+        totalKgs: 0,
+        totalCherryPrice: 0,
+        totalTransportFee: 0,
+        totalCommissionFee: 0,
+        purchaseDate: yesterday
+      };
+
+      // Calculate totals
+      cws.purchases.forEach(purchase => {
+        aggregation.totalKgs += purchase.totalKgs;
+        aggregation.totalCherryPrice += purchase.cherryPrice;
+        aggregation.totalTransportFee += purchase.transportFee;
+        aggregation.totalCommissionFee += purchase.commissionFee;
+      });
+
+      return aggregation;
+    });
+
+    // Only return CWS that have purchases
+    const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
+
+    res.json(filteredData);
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Failed to fetch aggregated CWS data',
+      details: error.message 
+    });
+  }
+});
+
 
 // Update a purchase
 router.put('/:id', async (req, res) => {
@@ -379,57 +450,6 @@ router.put('/:id', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
-
-// Update a purchase
-// router.put('/:id', async (req, res) => {
-//   const { id } = req.params;
-//   const {
-//     deliveryType,
-//     totalKgs,
-//     totalPrice,
-//     cherryPrice,    // New field
-//     transportFee,   // New field
-//     commissionFee,  // New field
-//     grade,
-//     cwsId,
-//     siteCollectionId
-//   } = req.body;
-
-//   try {
-//     const existingPurchase = await prisma.purchase.findUnique({
-//       where: { id: parseInt(id) }
-//     });
-
-//     if (!existingPurchase) {
-//       return res.status(404).json({ error: 'Purchase not found' });
-//     }
-
-//     const updatedPurchase = await prisma.purchase.update({
-//       where: {
-//         id: parseInt(id)
-//       },
-//       data: {
-//         deliveryType,
-//         totalKgs,
-//         totalPrice,
-//         cherryPrice,    // Update cherry price
-//         transportFee,   // Update transport fee
-//         commissionFee,  // Update commission fee
-//         grade,
-//         cwsId,
-//         siteCollectionId: deliveryType === 'SITE_COLLECTION' ? siteCollectionId : null
-//       },
-//       include: {
-//         cws: true,
-//         siteCollection: true
-//       }
-//     });
-
-//     res.json(updatedPurchase);
-//   } catch (error) {
-//     res.status(400).json({ error: error.message });
-//   }
-// });
 
 // Delete a purchase
 router.delete('/:id', async (req, res) => {

@@ -7,10 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {"px-4 py-3"
+enum UserRole {
   ADMIN
   CWS_MANAGER
   SUPER_ADMIN
+  SUPERVISOR
 }
 
 enum DeliveryType {
