@@ -286,7 +286,7 @@ router.get('/cws-aggregated', async (req, res) => {
     
     const endOfYesterday = new Date(yesterday);
     endOfYesterday.setUTCHours(23, 59, 59, 999);
-
+    
     // First get all CWS
     const cwsList = await prisma.cWS.findMany({
       select: {
@@ -295,8 +295,17 @@ router.get('/cws-aggregated', async (req, res) => {
         code: true
       }
     });
-
-    // Then get purchases for yesterday for each CWS
+    
+    // Find all batch numbers that are in processing
+    const processingBatches = await prisma.processing.findMany({
+      select: {
+        batchNo: true
+      }
+    });
+    
+    const batchNumbersInProcessing = processingBatches.map(p => p.batchNo);
+    
+    // Then get purchases for yesterday for each CWS that have batch numbers in processing
     const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
       const purchases = await prisma.purchase.findMany({
         where: {
@@ -304,6 +313,9 @@ router.get('/cws-aggregated', async (req, res) => {
           purchaseDate: {
             gte: yesterday,
             lte: endOfYesterday
+          },
+          batchNo: {
+            in: batchNumbersInProcessing
           }
         },
         select: {
@@ -312,10 +324,11 @@ router.get('/cws-aggregated', async (req, res) => {
           cherryPrice: true,
           transportFee: true,
           commissionFee: true,
-          purchaseDate: true
+          purchaseDate: true,
+          batchNo: true
         }
       });
-
+      
       // Calculate totals
       const totals = purchases.reduce((acc, purchase) => {
         return {
@@ -332,7 +345,7 @@ router.get('/cws-aggregated', async (req, res) => {
         totalTransportFee: 0,
         totalCommissionFee: 0
       });
-
+      
       return {
         cwsId: cws.id,
         cwsName: cws.name,
@@ -341,10 +354,10 @@ router.get('/cws-aggregated', async (req, res) => {
         purchaseDate: yesterday
       };
     }));
-
+    
     // Filter out CWS with no purchases
     const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
-
+    
     res.json(filteredData);
   } catch (error) {
     res.status(500).json({
@@ -378,11 +391,6 @@ router.get('/:id', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
-
-// Add this endpoint to your purchases router
-
-
-
 
 // Update a purchase
 router.put('/:id', async (req, res) => {
