@@ -277,33 +277,6 @@ router.get('/date/:date', async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-// Get a single purchase by ID
-router.get('/:id', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const purchase = await prisma.purchase.findUnique({
-      where: {
-        id: parseInt(id)
-      },
-      include: {
-        cws: true,
-        siteCollection: true
-      }
-    });
-
-    if (!purchase) {
-      return res.status(404).json({ error: 'Purchase not found' });
-    }
-
-    res.json(purchase);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// Add this endpoint to your purchases router
-
 router.get('/cws-aggregated', async (req, res) => {
   try {
     // Calculate yesterday's date range
@@ -377,6 +350,35 @@ router.get('/cws-aggregated', async (req, res) => {
     });
   }
 });
+
+// Get a single purchase by ID
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const purchase = await prisma.purchase.findUnique({
+      where: {
+        id: parseInt(id)
+      },
+      include: {
+        cws: true,
+        siteCollection: true
+      }
+    });
+
+    if (!purchase) {
+      return res.status(404).json({ error: 'Purchase not found' });
+    }
+
+    res.json(purchase);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Add this endpoint to your purchases router
+
+
 
 
 // Update a purchase
