@@ -314,54 +314,59 @@ router.get('/cws-aggregated', async (req, res) => {
     const endOfYesterday = new Date(yesterday);
     endOfYesterday.setUTCHours(23, 59, 59, 999);
 
-    const cwsData = await prisma.cWS.findMany({
+    // First get all CWS
+    const cwsList = await prisma.cWS.findMany({
       select: {
         id: true,
         name: true,
-        code: true,
-        purchases: {
-          where: {
-            purchaseDate: {
-              gte: yesterday,
-              lte: endOfYesterday
-            }
-          },
-          select: {
-            totalKgs: true,
-            cherryPrice: true,
-            transportFee: true,
-            commissionFee: true,
-            purchaseDate: true
-          }
-        }
+        code: true
       }
     });
 
-    const aggregatedData = cwsData.map(cws => {
-      // Initialize aggregation values
-      const aggregation = {
-        cwsId: cws.id,
-        cwsName: cws.name,
-        cwsCode: cws.code,
+    // Then get purchases for yesterday for each CWS
+    const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
+      const purchases = await prisma.purchase.findMany({
+        where: {
+          cwsId: cws.id,
+          purchaseDate: {
+            gte: yesterday,
+            lte: endOfYesterday
+          }
+        },
+        select: {
+          totalKgs: true,
+          cherryPrice: true,
+          transportFee: true,
+          commissionFee: true,
+          purchaseDate: true
+        }
+      });
+
+      // Calculate totals
+      const totals = purchases.reduce((acc, purchase) => {
+        return {
+          totalKgs: acc.totalKgs + purchase.totalKgs,
+          totalCherryPrice: acc.totalCherryPrice + purchase.cherryPrice,
+          totalTransportFee: acc.totalTransportFee + purchase.transportFee,
+          totalCommissionFee: acc.totalCommissionFee + purchase.commissionFee
+        };
+      }, {
         totalKgs: 0,
         totalCherryPrice: 0,
         totalTransportFee: 0,
-        totalCommissionFee: 0,
-        purchaseDate: yesterday
-      };
-
-      // Calculate totals
-      cws.purchases.forEach(purchase => {
-        aggregation.totalKgs += purchase.totalKgs;
-        aggregation.totalCherryPrice += purchase.cherryPrice;
-        aggregation.totalTransportFee += purchase.transportFee;
-        aggregation.totalCommissionFee += purchase.commissionFee;
+        totalCommissionFee: 0
       });
 
-      return aggregation;
-    });
+      return {
+        cwsId: cws.id,
+        cwsName: cws.name,
+        cwsCode: cws.code,
+        ...totals,
+        purchaseDate: yesterday
+      };
+    }));
 
-    // Only return CWS that have purchases
+    // Filter out CWS with no purchases
     const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
 
     res.json(filteredData);
