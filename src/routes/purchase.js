@@ -308,6 +308,7 @@ router.get('/cws-aggregated', async (req, res) => {
         },
         select: {
           totalKgs: true,
+          totalPrice: true,
           cherryPrice: true,
           transportFee: true,
           commissionFee: true,
@@ -319,12 +320,14 @@ router.get('/cws-aggregated', async (req, res) => {
       const totals = purchases.reduce((acc, purchase) => {
         return {
           totalKgs: acc.totalKgs + purchase.totalKgs,
-          totalCherryPrice: acc.totalCherryPrice + purchase.cherryPrice,
-          totalTransportFee: acc.totalTransportFee + purchase.transportFee,
-          totalCommissionFee: acc.totalCommissionFee + purchase.commissionFee
+          totalPrice: acc.totalPrice + purchase.totalPrice,
+          totalCherryPrice: acc.totalCherryPrice + (purchase.totalKgs * purchase.cherryPrice),
+          totalTransportFee: acc.totalTransportFee + (purchase.totalKgs * purchase.transportFee),
+          totalCommissionFee: acc.totalCommissionFee + (purchase.totalKgs * purchase.commissionFee)
         };
       }, {
         totalKgs: 0,
+        totalPrice: 0,
         totalCherryPrice: 0,
         totalTransportFee: 0,
         totalCommissionFee: 0
@@ -344,9 +347,9 @@ router.get('/cws-aggregated', async (req, res) => {
 
     res.json(filteredData);
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch aggregated CWS data',
-      details: error.message 
+      details: error.message
     });
   }
 });
