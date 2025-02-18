@@ -195,51 +195,84 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Enhanced User Login with CWS details
+// Update User (Admin and Self Only)
+router.put('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, password, role, cwsId } = req.body;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
+    if (!token) {
+      return res.status(401).json({ error: 'Access denied' });
+    }
 
-// router.post('/login', async (req, res) => {
-//   const { username, password } = req.body;
+    // Verify token and get user info
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = parseInt(id);
 
-//   try {
-//     const user = await prisma.user.findUnique({
-//       where: { username },
-//       include: {
-//         cws: true,
-//       }
-//     });
+    // Only allow users to update their own account or admins to update any account
+    if (decoded.userId !== userId && 
+        decoded.role !== 'ADMIN' && 
+        decoded.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'You can only update your own account' });
+    }
 
-//     if (!user) {
-//       return res.status(401).json({ error: 'Invalid username or password' });
-//     }
+    // Prepare update data
+    const updateData = {};
 
-//     const isMatch = await bcrypt.compare(password, user.password);
-//     if (!isMatch) {
-//       return res.status(401).json({ error: 'Invalid username or password' });
-//     }
+    if (username) updateData.username = username;
+    
+    // Only admins can change roles
+    if (role && (decoded.role === 'ADMIN' || decoded.role === 'SUPER_ADMIN')) {
+      updateData.role = role;
+    }
 
-//     const token = jwt.sign(
-//       { userId: user.id, username: user.username, role: user.role },
-//       process.env.JWT_SECRET,
-//       { expiresIn: '1d' }
-//     );
+    // Only admins can change cwsId
+    if (cwsId !== undefined && (decoded.role === 'ADMIN' || decoded.role === 'SUPER_ADMIN')) {
+      updateData.cwsId = cwsId ? parseInt(cwsId) : null;
+    }
 
-//     const userResponse = {
-//       token,
-//       user: {
-//         id: user.id,
-//         username: user.username,
-//         role: user.role,
-//         cwsId: user.cwsId,
-//       },
-//       cws: user.cws
-//     };
+    // Handle password update if provided
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
 
-//     res.json(userResponse);
-//   } catch (error) {
-//     res.status(400).json({ error: error.message });
-//   }
-// });
+    // Update the user
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        cwsId: true,
+        updatedAt: true,
+        cws: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            location: true
+          }
+        }
+      }
+    });
+
+    res.json({ 
+      message: 'User updated successfully', 
+      user: updatedUser 
+    });
+  } catch (error) {
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'Username already exists' });
+    } else if (error.name === 'JsonWebTokenError') {
+      res.status(403).json({ error: 'Invalid token' });
+    } else {
+      res.status(400).json({ error: error.message });
+    }
+  }
+});
 
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
