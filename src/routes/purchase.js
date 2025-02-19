@@ -531,7 +531,12 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
       }
     });
 
-    const batchNumbersInProcessing = processingBatches.map(p => p.batchNo);
+    // Extract batch prefixes (everything before the grade letter or hyphen)
+    const batchPrefixes = processingBatches.map(p => {
+      // Find the last occurrence of a number before any letter or hyphen
+      const match = p.batchNo.match(/^(\d+[A-Z]+\d+)/);
+      return match ? match[1] : p.batchNo;
+    });
 
     // Get purchases for each CWS within the date range
     const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
@@ -541,9 +546,6 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
           purchaseDate: {
             gte: start,
             lte: end
-          },
-          batchNo: {
-            in: batchNumbersInProcessing
           }
         },
         select: {
@@ -559,8 +561,16 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
         }
       });
 
+      // Filter purchases to only include those with matching batch prefixes
+      const matchingPurchases = purchases.filter(purchase => {
+        const purchaseBatchPrefix = purchase.batchNo.match(/^(\d+[A-Z]+\d+)/)?.[1];
+        return purchaseBatchPrefix && batchPrefixes.some(prefix => 
+          purchaseBatchPrefix.includes(prefix) || prefix.includes(purchaseBatchPrefix)
+        );
+      });
+
       // Calculate totals
-      const totals = purchases.reduce((acc, purchase) => {
+      const totals = matchingPurchases.reduce((acc, purchase) => {
         return {
           totalKgs: acc.totalKgs + purchase.totalKgs,
           totalPrice: acc.totalPrice + purchase.totalPrice,
@@ -577,7 +587,7 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
       });
 
       // Calculate delivery type breakdown
-      const deliveryTypeBreakdown = purchases.reduce((acc, purchase) => {
+      const deliveryTypeBreakdown = matchingPurchases.reduce((acc, purchase) => {
         if (!acc[purchase.deliveryType]) {
           acc[purchase.deliveryType] = {
             totalKgs: 0,
@@ -590,7 +600,7 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
       }, {});
 
       // Calculate grade breakdown
-      const gradeBreakdown = purchases.reduce((acc, purchase) => {
+      const gradeBreakdown = matchingPurchases.reduce((acc, purchase) => {
         if (!acc[purchase.grade]) {
           acc[purchase.grade] = {
             totalKgs: 0,
@@ -609,7 +619,7 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
         ...totals,
         deliveryTypeBreakdown,
         gradeBreakdown,
-        numberOfPurchases: purchases.length,
+        numberOfPurchases: matchingPurchases.length,
         dateRange: {
           start,
           end
