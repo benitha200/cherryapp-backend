@@ -4,56 +4,6 @@ import { PrismaClient } from '@prisma/client';
 const router = Router();
 const prisma = new PrismaClient();
 
-// router.post('/', async (req, res) => {
-//     const {
-//       batchNo,
-//       processingType,
-//       totalKgs,
-//       grade,
-//       cwsId
-//     } = req.body;
-
-//     try {
-//       // Validate batch exists
-//       const existingPurchase = await prisma.purchase.findFirst({
-//         where: { batchNo, grade }
-//       });
-
-//       if (!existingPurchase) {
-//         return res.status(404).json({ error: 'Batch not found' });
-//       }
-
-//       // Check if processing for this batch already exists
-//       const existingProcessing = await prisma.processing.findFirst({
-//         where: { batchNo }
-//       });
-
-//       if (existingProcessing) {
-//         return res.status(400).json({ error: 'Processing for this batch already started' });
-//       }
-
-//       const processing = await prisma.processing.create({
-//         data: {
-//           batchNo,
-//           processingType,
-//           totalKgs,
-//           grade,
-//           cwsId,
-//           status: 'IN_PROGRESS', // Explicitly set to IN_PROGRESS when starting
-//           startDate: new Date() // Explicitly set start date
-//         },
-//         include: {
-//         //   purchase: true,
-//           cws: true
-//         }
-//       });
-
-//       res.status(201).json(processing);
-//     } catch (error) {
-//       res.status(400).json({ error: error.message });
-//     }
-//   });
-
 router.post('/', async (req, res) => {
     const {
         batchNo,
