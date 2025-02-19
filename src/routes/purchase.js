@@ -17,7 +17,7 @@ const generateBatchNumber = (cws, grade, purchaseDate) => {
 const hasProcessingStarted = async (cwsId, purchaseDate) => {
   const purchaseDateObj = new Date(purchaseDate);
   purchaseDateObj.setUTCHours(0, 0, 0, 0);
-  
+
   const purchaseEndDate = new Date(purchaseDate);
   purchaseEndDate.setUTCHours(23, 59, 59, 999);
 
@@ -89,8 +89,8 @@ router.post('/', async (req, res) => {
     });
 
     if (!cws) {
-      return res.status(404).json({ 
-        error: 'CWS not found' 
+      return res.status(404).json({
+        error: 'CWS not found'
       });
     }
 
@@ -128,7 +128,7 @@ router.post('/', async (req, res) => {
           gte: purchaseDateTime,
           lt: new Date(purchaseDateTime.getTime() + 24 * 60 * 60 * 1000)
         },
-        ...(deliveryType === 'SITE_COLLECTION' 
+        ...(deliveryType === 'SITE_COLLECTION'
           ? { siteCollectionId }
           : { deliveryType }
         )
@@ -139,7 +139,7 @@ router.post('/', async (req, res) => {
       const errorMessage = deliveryType === 'SITE_COLLECTION'
         ? 'A purchase for this site and grade already exists for this date'
         : `A ${deliveryType.toLowerCase()} purchase for this grade already exists for this date`;
-      
+
       return res.status(400).json({ error: errorMessage });
     }
 
@@ -180,7 +180,7 @@ router.get('/', async (req, res) => {
         id: 'desc'
       }
     });
-    
+
     res.json(purchases);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -261,7 +261,7 @@ router.get('/date/:date', async (req, res) => {
   const { date } = req.params;
   try {
     const purchases = await prisma.purchase.findMany({
-      where: { 
+      where: {
         purchaseDate: { gte: new Date(date), lt: new Date(+new Date(date) + 86400000) }
       },
       include: { cws: true, siteCollection: true },
@@ -283,10 +283,10 @@ router.get('/cws-aggregated', async (req, res) => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setUTCHours(0, 0, 0, 0);
-    
+
     const endOfYesterday = new Date(yesterday);
     endOfYesterday.setUTCHours(23, 59, 59, 999);
-    
+
     // First get all CWS
     const cwsList = await prisma.cWS.findMany({
       select: {
@@ -295,16 +295,16 @@ router.get('/cws-aggregated', async (req, res) => {
         code: true
       }
     });
-    
+
     // Find all batch numbers that are in processing
     const processingBatches = await prisma.processing.findMany({
       select: {
         batchNo: true
       }
     });
-    
+
     const batchNumbersInProcessing = processingBatches.map(p => p.batchNo);
-    
+
     // Then get purchases for yesterday for each CWS that have batch numbers in processing
     const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
       const purchases = await prisma.purchase.findMany({
@@ -328,7 +328,7 @@ router.get('/cws-aggregated', async (req, res) => {
           batchNo: true
         }
       });
-      
+
       // Calculate totals
       const totals = purchases.reduce((acc, purchase) => {
         return {
@@ -345,7 +345,7 @@ router.get('/cws-aggregated', async (req, res) => {
         totalTransportFee: 0,
         totalCommissionFee: 0
       });
-      
+
       return {
         cwsId: cws.id,
         cwsName: cws.name,
@@ -354,11 +354,169 @@ router.get('/cws-aggregated', async (req, res) => {
         purchaseDate: yesterday
       };
     }));
-    
+
     // Filter out CWS with no purchases
     const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
-    
+
     res.json(filteredData);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to fetch aggregated CWS data',
+      details: error.message
+    });
+  }
+});
+
+// Add this new endpoint to your router
+router.get('/cws-aggregated/date-range', async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  try {
+    // Validate date parameters
+    if (!startDate || !endDate || isNaN(new Date(startDate).getTime()) || isNaN(new Date(endDate).getTime())) {
+      return res.status(400).json({
+        error: 'Invalid date format. Please provide valid startDate and endDate in ISO format'
+      });
+    }
+
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0);
+
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
+
+    // Get all CWS
+    const cwsList = await prisma.cWS.findMany({
+      select: {
+        id: true,
+        name: true,
+        code: true
+      }
+    });
+
+    // Find all batch numbers that are in processing
+    const processingBatches = await prisma.processing.findMany({
+      select: {
+        batchNo: true
+      }
+    });
+
+    const batchNumbersInProcessing = processingBatches.map(p => p.batchNo);
+
+    // Get purchases for each CWS within the date range
+    const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
+      const purchases = await prisma.purchase.findMany({
+        where: {
+          cwsId: cws.id,
+          purchaseDate: {
+            gte: start,
+            lte: end
+          },
+          batchNo: {
+            in: batchNumbersInProcessing
+          }
+        },
+        select: {
+          totalKgs: true,
+          totalPrice: true,
+          cherryPrice: true,
+          transportFee: true,
+          commissionFee: true,
+          purchaseDate: true,
+          batchNo: true,
+          deliveryType: true,
+          grade: true
+        }
+      });
+
+      // Calculate totals
+      const totals = purchases.reduce((acc, purchase) => {
+        return {
+          totalKgs: acc.totalKgs + purchase.totalKgs,
+          totalPrice: acc.totalPrice + purchase.totalPrice,
+          totalCherryPrice: acc.totalCherryPrice + (purchase.totalKgs * purchase.cherryPrice),
+          totalTransportFee: acc.totalTransportFee + (purchase.totalKgs * purchase.transportFee),
+          totalCommissionFee: acc.totalCommissionFee + (purchase.totalKgs * purchase.commissionFee)
+        };
+      }, {
+        totalKgs: 0,
+        totalPrice: 0,
+        totalCherryPrice: 0,
+        totalTransportFee: 0,
+        totalCommissionFee: 0
+      });
+
+      // Calculate delivery type breakdown
+      const deliveryTypeBreakdown = purchases.reduce((acc, purchase) => {
+        if (!acc[purchase.deliveryType]) {
+          acc[purchase.deliveryType] = {
+            totalKgs: 0,
+            totalPrice: 0
+          };
+        }
+        acc[purchase.deliveryType].totalKgs += purchase.totalKgs;
+        acc[purchase.deliveryType].totalPrice += purchase.totalPrice;
+        return acc;
+      }, {});
+
+      // Calculate grade breakdown
+      const gradeBreakdown = purchases.reduce((acc, purchase) => {
+        if (!acc[purchase.grade]) {
+          acc[purchase.grade] = {
+            totalKgs: 0,
+            totalPrice: 0
+          };
+        }
+        acc[purchase.grade].totalKgs += purchase.totalKgs;
+        acc[purchase.grade].totalPrice += purchase.totalPrice;
+        return acc;
+      }, {});
+
+      return {
+        cwsId: cws.id,
+        cwsName: cws.name,
+        cwsCode: cws.code,
+        ...totals,
+        deliveryTypeBreakdown,
+        gradeBreakdown,
+        numberOfPurchases: purchases.length,
+        dateRange: {
+          start,
+          end
+        }
+      };
+    }));
+
+    // Filter out CWS with no purchases
+    const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
+
+    // Calculate overall totals
+    const overallTotals = filteredData.reduce((acc, cws) => {
+      return {
+        totalKgs: acc.totalKgs + cws.totalKgs,
+        totalPrice: acc.totalPrice + cws.totalPrice,
+        totalCherryPrice: acc.totalCherryPrice + cws.totalCherryPrice,
+        totalTransportFee: acc.totalTransportFee + cws.totalTransportFee,
+        totalCommissionFee: acc.totalCommissionFee + cws.totalCommissionFee,
+        numberOfCWS: acc.numberOfCWS + 1
+      };
+    }, {
+      totalKgs: 0,
+      totalPrice: 0,
+      totalCherryPrice: 0,
+      totalTransportFee: 0,
+      totalCommissionFee: 0,
+      numberOfCWS: 0
+    });
+
+    res.json({
+      data: filteredData,
+      overallTotals,
+      dateRange: {
+        start,
+        end
+      }
+    });
   } catch (error) {
     res.status(500).json({
       error: 'Failed to fetch aggregated CWS data',
@@ -424,14 +582,14 @@ router.put('/:id', async (req, res) => {
       const cws = cwsId !== existingPurchase.cwsId
         ? await prisma.cWS.findUnique({ where: { id: cwsId } })
         : existingPurchase.cws;
-      
+
       if (!cws) {
         return res.status(404).json({ error: 'CWS not found' });
       }
-      
+
       // Regenerate batch number with new grade
       batchNo = generateBatchNumber(cws, grade, existingPurchase.purchaseDate);
-      
+
       // Check if the new batch is already in processing
       const batchInProcessing = await isBatchInProcessing(batchNo);
       if (batchInProcessing) {
