@@ -55,38 +55,33 @@ const generateBatchNumber = (cws, grade, purchaseDate) => {
 //   return matchingEntries.length > 0;
 // };
 
-const hasProcessingStarted = async (cwsId, purchaseDate) => {
+const hasProcessingStarted = async (cwsId, purchaseDate, grade) => {
   const purchaseDateObj = new Date(purchaseDate);
   purchaseDateObj.setUTCHours(0, 0, 0, 0);
   
-  const purchaseEndDate = new Date(purchaseDate);
-  purchaseEndDate.setUTCHours(23, 59, 59, 999);
+  // Get the CWS details to generate the batch number
+  const cws = await prisma.cWS.findUnique({
+    where: { id: cwsId }
+  });
+  
+  if (!cws) {
+    throw new Error('CWS not found');
+  }
 
-  const processingEntries = await prisma.processing.findMany({
+  // Generate the batch number for this purchase
+  const batchNo = generateBatchNumber(cws, grade, purchaseDate);
+
+  // Check if this specific batch is in processing
+  const processingEntry = await prisma.processing.findFirst({
     where: {
-      cwsId: cwsId,
-      startDate: {
-        gte: purchaseDateObj,
-        lte: purchaseEndDate
-      },
+      batchNo: batchNo,
       status: {
         in: ['IN_PROGRESS', 'COMPLETED']
       }
     }
   });
 
-  // Only consider processing entries that match the CWS ID and exact date
-  const matchingEntries = processingEntries.filter(entry => {
-    const processingDate = new Date(entry.startDate);
-    return (
-      entry.cwsId === cwsId &&
-      processingDate.getUTCFullYear() === purchaseDateObj.getUTCFullYear() &&
-      processingDate.getUTCMonth() === purchaseDateObj.getUTCMonth() &&
-      processingDate.getUTCDate() === purchaseDateObj.getUTCDate()
-    );
-  });
-
-  return matchingEntries.length > 0;
+  return processingEntry !== null;
 };
 
 // Helper function to check if batch is already in processing
