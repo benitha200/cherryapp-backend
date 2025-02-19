@@ -306,6 +306,98 @@ router.get('/date/:date', async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// router.get('/cws-aggregated', async (req, res) => {
+//   try {
+//     // Calculate yesterday's date range
+//     const yesterday = new Date();
+//     yesterday.setDate(yesterday.getDate() - 1);
+//     yesterday.setUTCHours(0, 0, 0, 0);
+
+//     const endOfYesterday = new Date(yesterday);
+//     endOfYesterday.setUTCHours(23, 59, 59, 999);
+
+//     // First get all CWS
+//     const cwsList = await prisma.cWS.findMany({
+//       select: {
+//         id: true,
+//         name: true,
+//         code: true
+//       }
+//     });
+
+//     // Find all batch numbers that are in processing
+//     const processingBatches = await prisma.processing.findMany({
+//       select: {
+//         batchNo: true
+//       }
+//     });
+
+//     const batchNumbersInProcessing = processingBatches.map(p => p.batchNo);
+
+//     // Then get purchases for yesterday for each CWS that have batch numbers in processing
+//     const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
+//       const purchases = await prisma.purchase.findMany({
+//         where: {
+//           cwsId: cws.id,
+//           purchaseDate: {
+//             gte: yesterday,
+//             lte: endOfYesterday
+//           },
+//           batchNo: {
+//             in: batchNumbersInProcessing
+//           }
+//         },
+//         select: {
+//           totalKgs: true,
+//           totalPrice: true,
+//           cherryPrice: true,
+//           transportFee: true,
+//           commissionFee: true,
+//           purchaseDate: true,
+//           batchNo: true
+//         }
+//       });
+
+//       // Calculate totals
+//       const totals = purchases.reduce((acc, purchase) => {
+//         return {
+//           totalKgs: acc.totalKgs + purchase.totalKgs,
+//           totalPrice: acc.totalPrice + purchase.totalPrice,
+//           totalCherryPrice: acc.totalCherryPrice + (purchase.totalKgs * purchase.cherryPrice),
+//           totalTransportFee: acc.totalTransportFee + (purchase.totalKgs * purchase.transportFee),
+//           totalCommissionFee: acc.totalCommissionFee + (purchase.totalKgs * purchase.commissionFee)
+//         };
+//       }, {
+//         totalKgs: 0,
+//         totalPrice: 0,
+//         totalCherryPrice: 0,
+//         totalTransportFee: 0,
+//         totalCommissionFee: 0
+//       });
+
+//       return {
+//         cwsId: cws.id,
+//         cwsName: cws.name,
+//         cwsCode: cws.code,
+//         ...totals,
+//         purchaseDate: yesterday
+//       };
+//     }));
+
+//     // Filter out CWS with no purchases
+//     const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
+
+//     res.json(filteredData);
+//   } catch (error) {
+//     res.status(500).json({
+//       error: 'Failed to fetch aggregated CWS data',
+//       details: error.message
+//     });
+//   }
+// });
+
+// Add this new endpoint to your router
+
 router.get('/cws-aggregated', async (req, res) => {
   try {
     // Calculate yesterday's date range
@@ -332,9 +424,14 @@ router.get('/cws-aggregated', async (req, res) => {
       }
     });
 
-    const batchNumbersInProcessing = processingBatches.map(p => p.batchNo);
+    // Extract batch prefixes (everything before the grade letter or hyphen)
+    const batchPrefixes = processingBatches.map(p => {
+      // Find the last occurrence of a number before any letter or hyphen
+      const match = p.batchNo.match(/^(\d+[A-Z]+\d+)/);
+      return match ? match[1] : p.batchNo;
+    });
 
-    // Then get purchases for yesterday for each CWS that have batch numbers in processing
+    // Then get purchases for yesterday for each CWS that have matching batch prefixes
     const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
       const purchases = await prisma.purchase.findMany({
         where: {
@@ -342,9 +439,6 @@ router.get('/cws-aggregated', async (req, res) => {
           purchaseDate: {
             gte: yesterday,
             lte: endOfYesterday
-          },
-          batchNo: {
-            in: batchNumbersInProcessing
           }
         },
         select: {
@@ -358,8 +452,16 @@ router.get('/cws-aggregated', async (req, res) => {
         }
       });
 
+      // Filter purchases to only include those with matching batch prefixes
+      const matchingPurchases = purchases.filter(purchase => {
+        const purchaseBatchPrefix = purchase.batchNo.match(/^(\d+[A-Z]+\d+)/)?.[1];
+        return purchaseBatchPrefix && batchPrefixes.some(prefix => 
+          purchaseBatchPrefix.includes(prefix) || prefix.includes(purchaseBatchPrefix)
+        );
+      });
+
       // Calculate totals
-      const totals = purchases.reduce((acc, purchase) => {
+      const totals = matchingPurchases.reduce((acc, purchase) => {
         return {
           totalKgs: acc.totalKgs + purchase.totalKgs,
           totalPrice: acc.totalPrice + purchase.totalPrice,
@@ -396,7 +498,6 @@ router.get('/cws-aggregated', async (req, res) => {
   }
 });
 
-// Add this new endpoint to your router
 router.get('/cws-aggregated/date-range', async (req, res) => {
   const { startDate, endDate } = req.query;
 
