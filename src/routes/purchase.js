@@ -14,6 +14,47 @@ const generateBatchNumber = (cws, grade, purchaseDate) => {
 };
 
 // Helper function to check if processing has started for a specific date
+// const hasProcessingStarted = async (cwsId, purchaseDate) => {
+//   const purchaseDateObj = new Date(purchaseDate);
+//   purchaseDateObj.setUTCHours(0, 0, 0, 0);
+  
+//   const purchaseEndDate = new Date(purchaseDate);
+//   purchaseEndDate.setUTCHours(23, 59, 59, 999);
+
+//   const processingEntries = await prisma.processing.findMany({
+//     where: {
+//       cwsId: cwsId,
+//       OR: [
+//         {
+//           startDate: {
+//             gte: purchaseDateObj,
+//             lte: purchaseEndDate
+//           }
+//         },
+//         {
+//           startDate: {
+//             gte: purchaseDateObj
+//           }
+//         }
+//       ],
+//       status: {
+//         in: ['IN_PROGRESS', 'COMPLETED']
+//       }
+//     }
+//   });
+
+//   const matchingEntries = processingEntries.filter(entry => {
+//     const processingDate = new Date(entry.startDate);
+//     return (
+//       processingDate.getUTCFullYear() === purchaseDateObj.getUTCFullYear() &&
+//       processingDate.getUTCMonth() === purchaseDateObj.getUTCMonth() &&
+//       processingDate.getUTCDate() === purchaseDateObj.getUTCDate()
+//     );
+//   });
+
+//   return matchingEntries.length > 0;
+// };
+
 const hasProcessingStarted = async (cwsId, purchaseDate) => {
   const purchaseDateObj = new Date(purchaseDate);
   purchaseDateObj.setUTCHours(0, 0, 0, 0);
@@ -24,28 +65,21 @@ const hasProcessingStarted = async (cwsId, purchaseDate) => {
   const processingEntries = await prisma.processing.findMany({
     where: {
       cwsId: cwsId,
-      OR: [
-        {
-          startDate: {
-            gte: purchaseDateObj,
-            lte: purchaseEndDate
-          }
-        },
-        {
-          startDate: {
-            gte: purchaseDateObj
-          }
-        }
-      ],
+      startDate: {
+        gte: purchaseDateObj,
+        lte: purchaseEndDate
+      },
       status: {
         in: ['IN_PROGRESS', 'COMPLETED']
       }
     }
   });
 
+  // Only consider processing entries that match the CWS ID and exact date
   const matchingEntries = processingEntries.filter(entry => {
     const processingDate = new Date(entry.startDate);
     return (
+      entry.cwsId === cwsId &&
       processingDate.getUTCFullYear() === purchaseDateObj.getUTCFullYear() &&
       processingDate.getUTCMonth() === purchaseDateObj.getUTCMonth() &&
       processingDate.getUTCDate() === purchaseDateObj.getUTCDate()
