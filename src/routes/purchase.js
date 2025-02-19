@@ -14,45 +14,74 @@ const generateBatchNumber = (cws, grade, purchaseDate) => {
 };
 
 // Helper function to check if processing has started for a specific date
-const hasProcessingStarted = async (cwsId, purchaseDate) => {
+// const hasProcessingStarted = async (cwsId, purchaseDate) => {
+//   const purchaseDateObj = new Date(purchaseDate);
+//   purchaseDateObj.setUTCHours(0, 0, 0, 0);
+  
+//   const purchaseEndDate = new Date(purchaseDate);
+//   purchaseEndDate.setUTCHours(23, 59, 59, 999);
+
+//   const processingEntries = await prisma.processing.findMany({
+//     where: {
+//       cwsId: cwsId,
+//       OR: [
+//         {
+//           startDate: {
+//             gte: purchaseDateObj,
+//             lte: purchaseEndDate
+//           }
+//         },
+//         {
+//           startDate: {
+//             gte: purchaseDateObj
+//           }
+//         }
+//       ],
+//       status: {
+//         in: ['IN_PROGRESS', 'COMPLETED']
+//       }
+//     }
+//   });
+
+//   const matchingEntries = processingEntries.filter(entry => {
+//     const processingDate = new Date(entry.startDate);
+//     return (
+//       processingDate.getUTCFullYear() === purchaseDateObj.getUTCFullYear() &&
+//       processingDate.getUTCMonth() === purchaseDateObj.getUTCMonth() &&
+//       processingDate.getUTCDate() === purchaseDateObj.getUTCDate()
+//     );
+//   });
+
+//   return matchingEntries.length > 0;
+// };
+
+const hasProcessingStarted = async (cwsId, purchaseDate, grade) => {
   const purchaseDateObj = new Date(purchaseDate);
   purchaseDateObj.setUTCHours(0, 0, 0, 0);
+  
+  // Get the CWS details to generate the batch number
+  const cws = await prisma.cWS.findUnique({
+    where: { id: cwsId }
+  });
+  
+  if (!cws) {
+    throw new Error('CWS not found');
+  }
 
-  const purchaseEndDate = new Date(purchaseDate);
-  purchaseEndDate.setUTCHours(23, 59, 59, 999);
+  // Generate the batch number for this purchase
+  const batchNo = generateBatchNumber(cws, grade, purchaseDate);
 
-  const processingEntries = await prisma.processing.findMany({
+  // Check if this specific batch is in processing
+  const processingEntry = await prisma.processing.findFirst({
     where: {
-      cwsId: cwsId,
-      OR: [
-        {
-          startDate: {
-            gte: purchaseDateObj,
-            lte: purchaseEndDate
-          }
-        },
-        {
-          startDate: {
-            gte: purchaseDateObj
-          }
-        }
-      ],
+      batchNo: batchNo,
       status: {
         in: ['IN_PROGRESS', 'COMPLETED']
       }
     }
   });
 
-  const matchingEntries = processingEntries.filter(entry => {
-    const processingDate = new Date(entry.startDate);
-    return (
-      processingDate.getUTCFullYear() === purchaseDateObj.getUTCFullYear() &&
-      processingDate.getUTCMonth() === purchaseDateObj.getUTCMonth() &&
-      processingDate.getUTCDate() === purchaseDateObj.getUTCDate()
-    );
-  });
-
-  return matchingEntries.length > 0;
+  return processingEntry !== null;
 };
 
 // Helper function to check if batch is already in processing
