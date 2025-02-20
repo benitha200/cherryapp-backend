@@ -156,6 +156,110 @@ router.post('/', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+router.post('/new', async (req, res) => {
+  try {
+    const purchaseData = {
+      cwsId: parseInt(req.body.cwsId),
+      deliveryType: req.body.deliveryType,
+      totalKgs: parseFloat(req.body.totalKgs),
+      totalPrice: parseFloat(req.body.totalPrice),
+      cherryPrice: parseFloat(req.body.cherryPrice),
+      transportFee: parseFloat(req.body.transportFee),
+      commissionFee: parseFloat(req.body.commissionFee),
+      grade: req.body.grade,
+      purchaseDate: new Date(req.body.purchaseDate),
+      batchNo: req.body.batchNo,
+      siteCollectionId: req.body.siteCollectionId ? 
+        parseInt(req.body.siteCollectionId) : null
+    };
+
+    // Validate the purchase data
+    // validatePurchaseData(purchaseData);
+
+    // Verify CWS exists
+    const cws = await prisma.cWS.findUnique({
+      where: { id: purchaseData.cwsId }
+    });
+
+    if (!cws) {
+      return res.status(404).json({
+        error: 'CWS not found'
+      });
+    }
+
+    // Verify site collection exists if delivery type is SITE_COLLECTION
+    if (purchaseData.deliveryType === 'SITE_COLLECTION') {
+      const siteCollection = await prisma.siteCollection.findUnique({
+        where: { id: purchaseData.siteCollectionId }
+      });
+
+      if (!siteCollection) {
+        return res.status(404).json({
+          error: 'Site collection not found'
+        });
+      }
+    }
+
+    // Check if processing has started
+    const processingStarted = await hasProcessingStarted(
+      purchaseData.cwsId,
+      purchaseData.purchaseDate,
+      purchaseData.grade
+    );
+
+    if (processingStarted) {
+      return res.status(400).json({
+        error: 'Cannot add purchase. Processing has already started for cherries from this date.'
+      });
+    }
+
+    // Check for duplicate purchases
+    const purchaseDateTime = new Date(purchaseData.purchaseDate);
+    purchaseDateTime.setUTCHours(0, 0, 0, 0);
+
+    const existingPurchase = await prisma.purchase.findFirst({
+      where: {
+        cwsId: purchaseData.cwsId,
+        grade: purchaseData.grade,
+        purchaseDate: {
+          gte: purchaseDateTime,
+          lt: new Date(purchaseDateTime.getTime() + 24 * 60 * 60 * 1000)
+        },
+        ...(purchaseData.deliveryType === 'SITE_COLLECTION'
+          ? { siteCollectionId: purchaseData.siteCollectionId }
+          : { deliveryType: purchaseData.deliveryType }
+        )
+      }
+    });
+
+    if (existingPurchase) {
+      const errorMessage = purchaseData.deliveryType === 'SITE_COLLECTION'
+        ? 'A purchase for this site and grade already exists for this date'
+        : `A ${purchaseData.deliveryType.toLowerCase()} purchase for this grade already exists for this date`;
+
+      return res.status(400).json({ error: errorMessage });
+    }
+
+    // Create the purchase
+    const purchase = await prisma.purchase.create({
+      data: purchaseData,
+      include: {
+        cws: true,
+        siteCollection: true
+      }
+    });
+
+    res.json(purchase);
+  } catch (error) {
+    console.error('Error creating purchase:', error);
+    res.status(400).json({ 
+      error: error.message || 'Error creating purchase'
+    });
+  }
+});
+
+
 // Get all purchases
 router.get('/', async (req, res) => {
   try {
