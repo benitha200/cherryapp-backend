@@ -316,7 +316,6 @@ router.get('/date/:date', async (req, res) => {
   }
 });
 
-
 // for yesterday purchases
 router.get('/cws-aggregated', async (req, res) => {
   try {
