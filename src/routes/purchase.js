@@ -369,6 +369,80 @@ router.get('/grouped', async (req, res) => {
 //   } catch (e) { res.status(400).json({ error: e.message }); }
 // });
 
+// Get purchases within date range without aggregation
+router.get('/date-range', async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  try {
+    // Validate date parameters
+    if (!startDate || !endDate || isNaN(new Date(startDate).getTime()) || isNaN(new Date(endDate).getTime())) {
+      return res.status(400).json({
+        error: 'Invalid date format. Please provide valid startDate and endDate in ISO format'
+      });
+    }
+
+    const start = new Date(startDate);
+    start.setUTCHours(0, 0, 0, 0);
+
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
+
+    // Get all purchases within the date range
+    const purchases = await prisma.purchase.findMany({
+      where: {
+        purchaseDate: {
+          gte: start,
+          lte: end
+        }
+      },
+      include: {
+        cws: true,
+        siteCollection: true
+      },
+      orderBy: [
+        {
+          purchaseDate: 'asc'
+        },
+        {
+          cwsId: 'asc'
+        },
+        {
+          deliveryType: 'asc'
+        }
+      ]
+    });
+
+    // Calculate date range totals
+    const totals = purchases.reduce((acc, purchase) => ({
+      totalKgs: acc.totalKgs + purchase.totalKgs,
+      totalPrice: acc.totalPrice + purchase.totalPrice,
+      totalTransportFee: acc.totalTransportFee + (purchase.totalKgs * purchase.transportFee),
+      totalCommissionFee: acc.totalCommissionFee + (purchase.totalKgs * purchase.commissionFee)
+    }), {
+      totalKgs: 0,
+      totalPrice: 0,
+      totalTransportFee: 0,
+      totalCommissionFee: 0
+    });
+
+    res.json({
+      dateRange: {
+        start,
+        end
+      },
+      totalPurchases: purchases.length,
+      totals,
+      purchases
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to fetch purchases within date range',
+      details: error.message
+    });
+  }
+});
+
 router.get('/date/:date', async (req, res) => {
   const { date } = req.params;
   try {
