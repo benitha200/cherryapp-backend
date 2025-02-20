@@ -17,12 +17,12 @@ const generateBatchNumber = (cws, grade, purchaseDate) => {
 const hasProcessingStarted = async (cwsId, purchaseDate, grade) => {
   const purchaseDateObj = new Date(purchaseDate);
   purchaseDateObj.setUTCHours(0, 0, 0, 0);
-  
+
   // Get the CWS details to generate the batch number
   const cws = await prisma.cWS.findUnique({
     where: { id: cwsId }
   });
-  
+
   if (!cws) {
     throw new Error('CWS not found');
   }
@@ -245,25 +245,77 @@ router.get('/grouped', async (req, res) => {
   }
 });
 
+// router.get('/date/:date', async (req, res) => {
+//   const { date } = req.params;
+//   try {
+//     const purchases = await prisma.purchase.findMany({
+//       where: {
+//         purchaseDate: { gte: new Date(date), lt: new Date(+new Date(date) + 86400000) }
+//       },
+//       include: { cws: true, siteCollection: true },
+//       orderBy: { cwsId: 'asc' }
+//     });
+//     const groupedPurchases = purchases.reduce((acc, p) => {
+//       const cws = acc.find(c => c.cwsId === p.cwsId) || { cwsId: p.cwsId, name: p.cws.name, purchases: [] };
+//       cws.purchases.push(p);
+//       if (!acc.some(c => c.cwsId === p.cwsId)) acc.push(cws);
+//       return acc;
+//     }, []);
+//     res.json(groupedPurchases);
+//   } catch (e) { res.status(400).json({ error: e.message }); }
+// });
+
 router.get('/date/:date', async (req, res) => {
   const { date } = req.params;
   try {
+    const startDate = new Date(date);
+    startDate.setUTCHours(0, 0, 0, 0);
+
+    const endDate = new Date(date);
+    endDate.setUTCHours(23, 59, 59, 999);
+
     const purchases = await prisma.purchase.findMany({
       where: {
-        purchaseDate: { gte: new Date(date), lt: new Date(+new Date(date) + 86400000) }
+        purchaseDate: {
+          gte: startDate,
+          lte: endDate
+        }
       },
-      include: { cws: true, siteCollection: true },
-      orderBy: { cwsId: 'asc' }
+      include: {
+        cws: true,
+        siteCollection: true
+      },
+      orderBy: {
+        cwsId: 'asc'
+      }
     });
-    const groupedPurchases = purchases.reduce((acc, p) => {
-      const cws = acc.find(c => c.cwsId === p.cwsId) || { cwsId: p.cwsId, name: p.cws.name, purchases: [] };
-      cws.purchases.push(p);
-      if (!acc.some(c => c.cwsId === p.cwsId)) acc.push(cws);
+
+    // Group purchases by CWS
+    const groupedPurchases = purchases.reduce((acc, purchase) => {
+      const cwsGroup = acc.find(g => g.cwsId === purchase.cwsId);
+
+      if (cwsGroup) {
+        cwsGroup.purchases.push(purchase);
+      } else {
+        acc.push({
+          cwsId: purchase.cwsId,
+          name: purchase.cws.name,
+          purchases: [purchase]
+        });
+      }
+
       return acc;
     }, []);
+
     res.json(groupedPurchases);
-  } catch (e) { res.status(400).json({ error: e.message }); }
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to fetch aggregated CWS data',
+      details: error.message
+    });
+  }
 });
+
 
 // for yesterday purchases
 router.get('/cws-aggregated', async (req, res) => {
@@ -323,7 +375,7 @@ router.get('/cws-aggregated', async (req, res) => {
       // Filter purchases to only include those with matching batch prefixes
       const matchingPurchases = purchases.filter(purchase => {
         const purchaseBatchPrefix = purchase.batchNo.match(/^(\d+[A-Z]+\d+)/)?.[1];
-        return purchaseBatchPrefix && batchPrefixes.some(prefix => 
+        return purchaseBatchPrefix && batchPrefixes.some(prefix =>
           purchaseBatchPrefix.includes(prefix) || prefix.includes(purchaseBatchPrefix)
         );
       });
@@ -433,7 +485,7 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
       // Filter purchases to only include those with matching batch prefixes
       const matchingPurchases = purchases.filter(purchase => {
         const purchaseBatchPrefix = purchase.batchNo.match(/^(\d+[A-Z]+\d+)/)?.[1];
-        return purchaseBatchPrefix && batchPrefixes.some(prefix => 
+        return purchaseBatchPrefix && batchPrefixes.some(prefix =>
           purchaseBatchPrefix.includes(prefix) || prefix.includes(purchaseBatchPrefix)
         );
       });
@@ -581,7 +633,7 @@ router.get('/cws-aggregated-all', async (req, res) => {
       // Filter purchases to only include those with matching batch prefixes
       const matchingPurchases = purchases.filter(purchase => {
         const purchaseBatchPrefix = purchase.batchNo.match(/^(\d+[A-Z]+\d+)/)?.[1];
-        return purchaseBatchPrefix && batchPrefixes.some(prefix => 
+        return purchaseBatchPrefix && batchPrefixes.some(prefix =>
           purchaseBatchPrefix.includes(prefix) || prefix.includes(purchaseBatchPrefix)
         );
       });
@@ -674,7 +726,7 @@ router.get('/cws-aggregated-all', async (req, res) => {
     const allDates = filteredData
       .filter(cws => cws.dateRange)
       .flatMap(cws => [cws.dateRange.start, cws.dateRange.end]);
-    
+
     const overallDateRange = allDates.length > 0 ? {
       start: new Date(Math.min(...allDates)),
       end: new Date(Math.max(...allDates))
