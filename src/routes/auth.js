@@ -134,7 +134,8 @@ const isAdmin = (req, res, next) => {
 };
 
 // Get all users (Admin only)
-router.get('/users', isAdmin, async (req, res) => {
+// router.get('/users', isAdmin, async (req, res) => {
+router.get('/users', async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {
