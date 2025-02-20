@@ -274,6 +274,14 @@ router.get('/date/:date', async (req, res) => {
     const endDate = new Date(date);
     endDate.setUTCHours(23, 59, 59, 999);
 
+    // First get all CWS to ensure proper ordering
+    const allCws = await prisma.cWS.findMany({
+      orderBy: {
+        name: 'asc'
+      }
+    });
+
+    // Get all purchases for the date
     const purchases = await prisma.purchase.findMany({
       where: {
         purchaseDate: {
@@ -285,32 +293,92 @@ router.get('/date/:date', async (req, res) => {
         cws: true,
         siteCollection: true
       },
-      orderBy: {
-        cwsId: 'asc'
+      orderBy: [
+        {
+          cwsId: 'asc'
+        },
+        {
+          deliveryType: 'asc'
+        },
+        {
+          id: 'asc'
+        }
+      ]
+    });
+
+    // Create a map of CWS IDs to their purchases
+    const purchasesByCws = new Map();
+    
+    // Initialize the map with all CWS, even those without purchases
+    allCws.forEach(cws => {
+      purchasesByCws.set(cws.id, {
+        cwsId: cws.id,
+        name: cws.name,
+        purchases: []
+      });
+    });
+
+    // Add purchases to their respective CWS
+    purchases.forEach(purchase => {
+      const cwsEntry = purchasesByCws.get(purchase.cwsId);
+      if (cwsEntry) {
+        cwsEntry.purchases.push(purchase);
       }
     });
 
-    // Group purchases by CWS
-    const groupedPurchases = purchases.reduce((acc, purchase) => {
-      const cwsGroup = acc.find(g => g.cwsId === purchase.cwsId);
+    // Convert map to array and filter out CWS without purchases
+    const groupedPurchases = Array.from(purchasesByCws.values())
+      .filter(cws => cws.purchases.length > 0);
 
-      if (cwsGroup) {
-        cwsGroup.purchases.push(purchase);
-      } else {
-        acc.push({
-          cwsId: purchase.cwsId,
-          name: purchase.cws.name,
-          purchases: [purchase]
-        });
+    // Calculate totals for each CWS
+    const result = groupedPurchases.map(group => ({
+      cwsId: group.cwsId,
+      name: group.name,
+      purchases: group.purchases,
+      totals: {
+        totalKgs: group.purchases.reduce((sum, p) => sum + p.totalKgs, 0),
+        totalPrice: group.purchases.reduce((sum, p) => sum + p.totalPrice, 0),
+        directDelivery: {
+          kgs: group.purchases
+            .filter(p => p.deliveryType === 'DIRECT_DELIVERY')
+            .reduce((sum, p) => sum + p.totalKgs, 0),
+          amount: group.purchases
+            .filter(p => p.deliveryType === 'DIRECT_DELIVERY')
+            .reduce((sum, p) => sum + p.totalPrice, 0)
+        },
+        siteCollection: {
+          kgs: group.purchases
+            .filter(p => p.deliveryType === 'SITE_COLLECTION')
+            .reduce((sum, p) => sum + p.totalKgs, 0),
+          amount: group.purchases
+            .filter(p => p.deliveryType === 'SITE_COLLECTION')
+            .reduce((sum, p) => sum + p.totalPrice, 0)
+        }
       }
+    }));
 
-      return acc;
-    }, []);
+    // Add grand totals
+    const grandTotals = {
+      totalKgs: result.reduce((sum, cws) => sum + cws.totals.totalKgs, 0),
+      totalPrice: result.reduce((sum, cws) => sum + cws.totals.totalPrice, 0),
+      directDelivery: {
+        kgs: result.reduce((sum, cws) => sum + cws.totals.directDelivery.kgs, 0),
+        amount: result.reduce((sum, cws) => sum + cws.totals.directDelivery.amount, 0)
+      },
+      siteCollection: {
+        kgs: result.reduce((sum, cws) => sum + cws.totals.siteCollection.kgs, 0),
+        amount: result.reduce((sum, cws) => sum + cws.totals.siteCollection.amount, 0)
+      }
+    };
 
-    res.json(groupedPurchases);
+    res.json({
+      date: startDate,
+      cwsData: result,
+      grandTotals
+    });
   } catch (error) {
     res.status(500).json({
-      error: 'Failed to fetch aggregated CWS data',
+      error: 'Failed to fetch purchases by date',
       details: error.message
     });
   }
