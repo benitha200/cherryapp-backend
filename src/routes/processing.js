@@ -66,6 +66,47 @@ router.post('/', async (req, res) => {
 });
 
 
+router.get('/', async (req, res) => {
+    const { status, processingType, page = 1, limit = 10 } = req.query;
+
+    try {
+        const processing = await prisma.processing.findMany({
+            where: {
+                ...(status && { status }),
+                ...(processingType && { processingType })
+            },
+            include: {
+                cws: true
+            },
+            orderBy: {
+                createdAt: 'desc'
+            },
+            skip: (parseInt(page) - 1) * parseInt(limit),
+            take: parseInt(limit)
+        });
+
+        // Get total count for pagination
+        const total = await prisma.processing.count({
+            where: {
+                ...(status && { status }),
+                ...(processingType && { processingType })
+            }
+        });
+
+        res.json({
+            data: processing,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / parseInt(limit))
+            }
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 
 // Get Processing by Batch Number
 router.get('/batch/:batchNo', async (req, res) => {
