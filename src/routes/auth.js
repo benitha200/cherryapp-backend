@@ -135,32 +135,35 @@ const isAdmin = (req, res, next) => {
 
 // Get all users (Admin only)
 // router.get('/users', isAdmin, async (req, res) => {
-router.get('/users', async (req, res) => {
-  try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        cwsId: true,
-        createdAt: true,
-        updatedAt: true,
-        cws: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
-            location: true
+  router.get('/users', async (req, res) => {
+    try {
+      const users = await prisma.user.findMany({
+        orderBy: {
+          id: 'desc'
+        },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          cwsId: true,
+          createdAt: true,
+          updatedAt: true,
+          cws: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              location: true
+            }
           }
         }
-      }
-    });
-    res.json(users);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
+      });
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
 // User Registration
 router.post('/register', async (req, res) => {
   const { username, password, role, cwsId } = req.body;
