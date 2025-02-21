@@ -349,25 +349,6 @@ router.get('/grouped', async (req, res) => {
   }
 });
 
-// router.get('/date/:date', async (req, res) => {
-//   const { date } = req.params;
-//   try {
-//     const purchases = await prisma.purchase.findMany({
-//       where: {
-//         purchaseDate: { gte: new Date(date), lt: new Date(+new Date(date) + 86400000) }
-//       },
-//       include: { cws: true, siteCollection: true },
-//       orderBy: { cwsId: 'asc' }
-//     });
-//     const groupedPurchases = purchases.reduce((acc, p) => {
-//       const cws = acc.find(c => c.cwsId === p.cwsId) || { cwsId: p.cwsId, name: p.cws.name, purchases: [] };
-//       cws.purchases.push(p);
-//       if (!acc.some(c => c.cwsId === p.cwsId)) acc.push(cws);
-//       return acc;
-//     }, []);
-//     res.json(groupedPurchases);
-//   } catch (e) { res.status(400).json({ error: e.message }); }
-// });
 
 // Get purchases within date range without aggregation
 router.get('/date-range', async (req, res) => {
@@ -832,6 +813,164 @@ router.get('/cws-aggregated/date-range', async (req, res) => {
 });
 
 // All data cws aggregated
+// router.get('/cws-aggregated-all', async (req, res) => {
+//   try {
+//     // Get all CWS
+//     const cwsList = await prisma.cWS.findMany({
+//       select: {
+//         id: true,
+//         name: true,
+//         code: true
+//       }
+//     });
+
+//     // Find all batch numbers that are in processing
+//     const processingBatches = await prisma.processing.findMany({
+//       select: {
+//         batchNo: true
+//       }
+//     });
+
+//     // Extract batch prefixes (everything before the grade letter or hyphen)
+//     const batchPrefixes = processingBatches.map(p => {
+//       const match = p.batchNo.match(/^(\d+[A-Z]+\d+)/);
+//       return match ? match[1] : p.batchNo;
+//     });
+
+//     // Get all purchases for each CWS
+//     const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
+//       const purchases = await prisma.purchase.findMany({
+//         where: {
+//           cwsId: cws.id
+//         },
+//         select: {
+//           totalKgs: true,
+//           totalPrice: true,
+//           cherryPrice: true,
+//           transportFee: true,
+//           commissionFee: true,
+//           purchaseDate: true,
+//           batchNo: true,
+//           deliveryType: true,
+//           grade: true
+//         }
+//       });
+
+//       // Filter purchases to only include those with matching batch prefixes
+//       const matchingPurchases = purchases.filter(purchase => {
+//         const purchaseBatchPrefix = purchase.batchNo.match(/^(\d+[A-Z]+\d+)/)?.[1];
+//         return purchaseBatchPrefix && batchPrefixes.some(prefix =>
+//           purchaseBatchPrefix.includes(prefix) || prefix.includes(purchaseBatchPrefix)
+//         );
+//       });
+
+//       // Calculate totals
+//       const totals = matchingPurchases.reduce((acc, purchase) => {
+//         return {
+//           totalKgs: acc.totalKgs + purchase.totalKgs,
+//           totalPrice: acc.totalPrice + purchase.totalPrice,
+//           totalCherryPrice: acc.totalCherryPrice + (purchase.totalKgs * purchase.cherryPrice),
+//           totalTransportFee: acc.totalTransportFee + (purchase.totalKgs * purchase.transportFee),
+//           totalCommissionFee: acc.totalCommissionFee + (purchase.totalKgs * purchase.commissionFee)
+//         };
+//       }, {
+//         totalKgs: 0,
+//         totalPrice: 0,
+//         totalCherryPrice: 0,
+//         totalTransportFee: 0,
+//         totalCommissionFee: 0
+//       });
+
+//       // Calculate delivery type breakdown
+//       const deliveryTypeBreakdown = matchingPurchases.reduce((acc, purchase) => {
+//         if (!acc[purchase.deliveryType]) {
+//           acc[purchase.deliveryType] = {
+//             totalKgs: 0,
+//             totalPrice: 0
+//           };
+//         }
+//         acc[purchase.deliveryType].totalKgs += purchase.totalKgs;
+//         acc[purchase.deliveryType].totalPrice += purchase.totalPrice;
+//         return acc;
+//       }, {});
+
+//       // Calculate grade breakdown
+//       const gradeBreakdown = matchingPurchases.reduce((acc, purchase) => {
+//         if (!acc[purchase.grade]) {
+//           acc[purchase.grade] = {
+//             totalKgs: 0,
+//             totalPrice: 0
+//           };
+//         }
+//         acc[purchase.grade].totalKgs += purchase.totalKgs;
+//         acc[purchase.grade].totalPrice += purchase.totalPrice;
+//         return acc;
+//       }, {});
+
+//       // Calculate date range for this CWS's purchases
+//       const dates = matchingPurchases.map(p => new Date(p.purchaseDate));
+//       const dateRange = dates.length > 0 ? {
+//         start: new Date(Math.min(...dates)),
+//         end: new Date(Math.max(...dates))
+//       } : null;
+
+//       return {
+//         cwsId: cws.id,
+//         cwsName: cws.name,
+//         cwsCode: cws.code,
+//         ...totals,
+//         deliveryTypeBreakdown,
+//         gradeBreakdown,
+//         numberOfPurchases: matchingPurchases.length,
+//         dateRange
+//       };
+//     }));
+
+//     // Filter out CWS with no purchases
+//     const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
+
+//     // Calculate overall totals
+//     const overallTotals = filteredData.reduce((acc, cws) => {
+//       return {
+//         totalKgs: acc.totalKgs + cws.totalKgs,
+//         totalPrice: acc.totalPrice + cws.totalPrice,
+//         totalCherryPrice: acc.totalCherryPrice + cws.totalCherryPrice,
+//         totalTransportFee: acc.totalTransportFee + cws.totalTransportFee,
+//         totalCommissionFee: acc.totalCommissionFee + cws.totalCommissionFee,
+//         numberOfCWS: acc.numberOfCWS + 1
+//       };
+//     }, {
+//       totalKgs: 0,
+//       totalPrice: 0,
+//       totalCherryPrice: 0,
+//       totalTransportFee: 0,
+//       totalCommissionFee: 0,
+//       numberOfCWS: 0
+//     });
+
+//     // Calculate overall date range
+//     const allDates = filteredData
+//       .filter(cws => cws.dateRange)
+//       .flatMap(cws => [cws.dateRange.start, cws.dateRange.end]);
+
+//     const overallDateRange = allDates.length > 0 ? {
+//       start: new Date(Math.min(...allDates)),
+//       end: new Date(Math.max(...allDates))
+//     } : null;
+
+//     res.json({
+//       data: filteredData,
+//       overallTotals,
+//       overallDateRange
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       error: 'Failed to fetch aggregated CWS data',
+//       details: error.message
+//     });
+//   }
+// });
+
 router.get('/cws-aggregated-all', async (req, res) => {
   try {
     // Get all CWS
@@ -843,24 +982,11 @@ router.get('/cws-aggregated-all', async (req, res) => {
       }
     });
 
-    // Find all batch numbers that are in processing
-    const processingBatches = await prisma.processing.findMany({
-      select: {
-        batchNo: true
-      }
-    });
-
-    // Extract batch prefixes (everything before the grade letter or hyphen)
-    const batchPrefixes = processingBatches.map(p => {
-      const match = p.batchNo.match(/^(\d+[A-Z]+\d+)/);
-      return match ? match[1] : p.batchNo;
-    });
-
-    // Get all purchases for each CWS
+    // Get purchases for each CWS within the date range
     const aggregatedData = await Promise.all(cwsList.map(async (cws) => {
       const purchases = await prisma.purchase.findMany({
         where: {
-          cwsId: cws.id
+          cwsId: cws.id,
         },
         select: {
           totalKgs: true,
@@ -875,16 +1001,8 @@ router.get('/cws-aggregated-all', async (req, res) => {
         }
       });
 
-      // Filter purchases to only include those with matching batch prefixes
-      const matchingPurchases = purchases.filter(purchase => {
-        const purchaseBatchPrefix = purchase.batchNo.match(/^(\d+[A-Z]+\d+)/)?.[1];
-        return purchaseBatchPrefix && batchPrefixes.some(prefix =>
-          purchaseBatchPrefix.includes(prefix) || prefix.includes(purchaseBatchPrefix)
-        );
-      });
-
-      // Calculate totals
-      const totals = matchingPurchases.reduce((acc, purchase) => {
+      // Calculate totals without batch filtering
+      const totals = purchases.reduce((acc, purchase) => {
         return {
           totalKgs: acc.totalKgs + purchase.totalKgs,
           totalPrice: acc.totalPrice + purchase.totalPrice,
@@ -901,7 +1019,7 @@ router.get('/cws-aggregated-all', async (req, res) => {
       });
 
       // Calculate delivery type breakdown
-      const deliveryTypeBreakdown = matchingPurchases.reduce((acc, purchase) => {
+      const deliveryTypeBreakdown = purchases.reduce((acc, purchase) => {
         if (!acc[purchase.deliveryType]) {
           acc[purchase.deliveryType] = {
             totalKgs: 0,
@@ -914,7 +1032,7 @@ router.get('/cws-aggregated-all', async (req, res) => {
       }, {});
 
       // Calculate grade breakdown
-      const gradeBreakdown = matchingPurchases.reduce((acc, purchase) => {
+      const gradeBreakdown = purchases.reduce((acc, purchase) => {
         if (!acc[purchase.grade]) {
           acc[purchase.grade] = {
             totalKgs: 0,
@@ -926,13 +1044,6 @@ router.get('/cws-aggregated-all', async (req, res) => {
         return acc;
       }, {});
 
-      // Calculate date range for this CWS's purchases
-      const dates = matchingPurchases.map(p => new Date(p.purchaseDate));
-      const dateRange = dates.length > 0 ? {
-        start: new Date(Math.min(...dates)),
-        end: new Date(Math.max(...dates))
-      } : null;
-
       return {
         cwsId: cws.id,
         cwsName: cws.name,
@@ -940,8 +1051,7 @@ router.get('/cws-aggregated-all', async (req, res) => {
         ...totals,
         deliveryTypeBreakdown,
         gradeBreakdown,
-        numberOfPurchases: matchingPurchases.length,
-        dateRange
+        numberOfPurchases: purchases.length
       };
     }));
 
@@ -967,20 +1077,9 @@ router.get('/cws-aggregated-all', async (req, res) => {
       numberOfCWS: 0
     });
 
-    // Calculate overall date range
-    const allDates = filteredData
-      .filter(cws => cws.dateRange)
-      .flatMap(cws => [cws.dateRange.start, cws.dateRange.end]);
-
-    const overallDateRange = allDates.length > 0 ? {
-      start: new Date(Math.min(...allDates)),
-      end: new Date(Math.max(...allDates))
-    } : null;
-
     res.json({
       data: filteredData,
-      overallTotals,
-      overallDateRange
+      overallTotals
     });
   } catch (error) {
     res.status(500).json({
