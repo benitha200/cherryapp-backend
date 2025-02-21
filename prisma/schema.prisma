@@ -12,6 +12,9 @@ enum UserRole {
   CWS_MANAGER
   SUPER_ADMIN
   SUPERVISOR
+  MD
+  FINANCE
+  OPERATIONS
 }
 
 enum DeliveryType {
