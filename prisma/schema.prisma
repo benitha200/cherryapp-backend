@@ -109,6 +109,7 @@ model BaggingOff {
   date          DateTime
   outputKgs     Json    
   totalOutputKgs Float
+  processingType String
   status        String   @default("COMPLETED")
   notes         String?
   transfers     Transfer[]

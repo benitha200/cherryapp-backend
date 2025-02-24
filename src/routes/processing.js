@@ -173,7 +173,7 @@ router.get('/cws/:cwsId', async (req, res) => {
                 cws: true
             },
             orderBy: {
-                createdAt: 'desc'
+                createdAt: 'asc'
             }
         });
 
