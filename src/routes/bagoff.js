@@ -370,7 +370,8 @@ router.get('/cws/:cwsId', async (req, res) => {
       where: {
         processing: {
           cwsId: cwsId
-        }
+        },
+        status:"COMPLETED"
       },
       include: {
         processing: {
