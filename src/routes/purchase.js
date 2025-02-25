@@ -260,24 +260,7 @@ router.post('/new', async (req, res) => {
 });
 
 
-// Get all purchases
-router.get('/', async (req, res) => {
-  try {
-    const purchases = await prisma.purchase.findMany({
-      include: {
-        cws: true,
-        siteCollection: true
-      },
-      orderBy: {
-        id: 'desc'
-      }
-    });
 
-    res.json(purchases);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
 
 // Get purchases for a CWS
 router.get('/cws/:cwsId', async (req, res) => {
@@ -305,6 +288,26 @@ router.get('/cws/:cwsId', async (req, res) => {
 
 
 // ORIGINAL DATA WITH TEST DATA
+
+// // Get all purchases
+// router.get('/', async (req, res) => {
+//   try {
+//     const purchases = await prisma.purchase.findMany({
+//       include: {
+//         cws: true,
+//         siteCollection: true
+//       },
+//       orderBy: {
+//         id: 'desc'
+//       }
+//     });
+
+//     res.json(purchases);
+//   } catch (error) {
+//     res.status(400).json({ error: error.message });
+//   }
+// });
+
 
 // New endpoint for grouped purchases
 // router.get('/grouped', async (req, res) => {
@@ -935,8 +938,31 @@ router.get('/cws/:cwsId', async (req, res) => {
 //   }
 // });
 
-
-
+// GET ALL PURCHASES WITHOUT TEST
+router.get('/', async (req, res) => {
+  try {
+    const purchases = await prisma.purchase.findMany({
+      where: {
+        cws: {
+          name: {
+            not: "TEST"
+          }
+        }
+      },
+      include: {
+        cws: true,
+        siteCollection: true
+      },
+      orderBy: {
+        id: 'desc'
+      }
+    });
+    
+    res.json(purchases);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 // Modify the /grouped endpoint
 router.get('/grouped', async (req, res) => {
   try {
