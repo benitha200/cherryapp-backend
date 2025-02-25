@@ -11,10 +11,11 @@ router.post('/', async (req, res) => {
       outputKgs,
       processingType,
       existingProcessing,
-      batchNo
+      batchNo,
+      status
     } = req.body;
 
-    if (!date || !outputKgs || !batchNo || !processingType) {
+    if (!date || !outputKgs || !batchNo || !processingType || !status) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -32,8 +33,8 @@ router.post('/', async (req, res) => {
 
     // Process the bagging off in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Update existing processing status if it exists
-      if (existingProcessing?.id) {
+      // Only update processing status if status is COMPLETED
+      if (status === 'COMPLETED' && existingProcessing?.id) {
         await tx.processing.update({
           where: { id: existingProcessing.id },
           data: { 
@@ -47,33 +48,65 @@ router.post('/', async (req, res) => {
 
       switch (processingType) {
         case 'HONEY':
-          // Create HONEY bagging off record
+          // Create/Update HONEY bagging off record
           if (outputKgs.H1) {
             const honeyOutput = {
               H1: parseFloat(outputKgs.H1) || 0
             };
-            const honeyBaggingOff = await tx.baggingOff.create({
-              data: {
+            
+            // Check if there's an existing HONEY record for this batch
+            const existingHoneyRecord = await tx.baggingOff.findFirst({
+              where: {
                 batchNo,
-                processingId: existingProcessing?.id || processing.id,
-                date: new Date(date),
-                outputKgs: honeyOutput,
-                totalOutputKgs: honeyOutput.H1,
                 processingType: 'HONEY',
-                status: 'COMPLETED'
-              },
-              include: {
-                processing: {
-                  include: {
-                    cws: true
-                  }
-                }
+                processingId: existingProcessing?.id || processing.id
               }
             });
+
+            let honeyBaggingOff;
+            if (existingHoneyRecord) {
+              // Update existing record
+              honeyBaggingOff = await tx.baggingOff.update({
+                where: { id: existingHoneyRecord.id },
+                data: {
+                  date: new Date(date),
+                  outputKgs: honeyOutput,
+                  totalOutputKgs: honeyOutput.H1,
+                  status: status
+                },
+                include: {
+                  processing: {
+                    include: {
+                      cws: true
+                    }
+                  }
+                }
+              });
+            } else {
+              // Create new record
+              honeyBaggingOff = await tx.baggingOff.create({
+                data: {
+                  batchNo,
+                  processingId: existingProcessing?.id || processing.id,
+                  date: new Date(date),
+                  outputKgs: honeyOutput,
+                  totalOutputKgs: honeyOutput.H1,
+                  processingType: 'HONEY',
+                  status: status
+                },
+                include: {
+                  processing: {
+                    include: {
+                      cws: true
+                    }
+                  }
+                }
+              });
+            }
             baggingOffRecords.push(honeyBaggingOff);
           }
 
-          // Create FULLY WASHED bagging off record if A0-A3 values exist
+          // Create/Update FULLY WASHED bagging off record if A0-A3 values exist
           if (outputKgs.A0 || outputKgs.A1 || outputKgs.A2 || outputKgs.A3) {
             const fullyWashedOutput = {
               A0: parseFloat(outputKgs.A0) || 0,
@@ -84,24 +117,55 @@ router.post('/', async (req, res) => {
             const fullyWashedTotal = Object.values(fullyWashedOutput)
               .reduce((sum, kg) => sum + kg, 0);
             
-            const fullyWashedBaggingOff = await tx.baggingOff.create({
-              data: {
+            // Check if there's an existing FULLY WASHED record for this batch
+            const existingFWRecord = await tx.baggingOff.findFirst({
+              where: {
                 batchNo,
-                processingId: existingProcessing?.id || processing.id,
-                date: new Date(date),
-                outputKgs: fullyWashedOutput,
-                totalOutputKgs: fullyWashedTotal,
                 processingType: 'FULLY WASHED',
-                status: 'COMPLETED'
-              },
-              include: {
-                processing: {
-                  include: {
-                    cws: true
-                  }
-                }
+                processingId: existingProcessing?.id || processing.id
               }
             });
+
+            let fullyWashedBaggingOff;
+            if (existingFWRecord) {
+              // Update existing record
+              fullyWashedBaggingOff = await tx.baggingOff.update({
+                where: { id: existingFWRecord.id },
+                data: {
+                  date: new Date(date),
+                  outputKgs: fullyWashedOutput,
+                  totalOutputKgs: fullyWashedTotal,
+                  status: status
+                },
+                include: {
+                  processing: {
+                    include: {
+                      cws: true
+                    }
+                  }
+                }
+              });
+            } else {
+              // Create new record
+              fullyWashedBaggingOff = await tx.baggingOff.create({
+                data: {
+                  batchNo,
+                  processingId: existingProcessing?.id || processing.id,
+                  date: new Date(date),
+                  outputKgs: fullyWashedOutput,
+                  totalOutputKgs: fullyWashedTotal,
+                  processingType: 'FULLY WASHED',
+                  status: status
+                },
+                include: {
+                  processing: {
+                    include: {
+                      cws: true
+                    }
+                  }
+                }
+              });
+            }
             baggingOffRecords.push(fullyWashedBaggingOff);
           }
           break;
@@ -117,24 +181,55 @@ router.post('/', async (req, res) => {
                 N2: parseFloat(outputKgs.N2) || 0
               };
           
-          const naturalBaggingOff = await tx.baggingOff.create({
-            data: {
+          // Check for existing NATURAL record
+          const existingNaturalRecord = await tx.baggingOff.findFirst({
+            where: {
               batchNo,
-              processingId: existingProcessing?.id || processing.id,
-              date: new Date(date),
-              outputKgs: naturalOutput,
-              totalOutputKgs: Object.values(naturalOutput).reduce((sum, kg) => sum + kg, 0),
               processingType: 'NATURAL',
-              status: 'COMPLETED'
-            },
-            include: {
-              processing: {
-                include: {
-                  cws: true
-                }
-              }
+              processingId: existingProcessing?.id || processing.id
             }
           });
+
+          let naturalBaggingOff;
+          if (existingNaturalRecord) {
+            // Update existing record
+            naturalBaggingOff = await tx.baggingOff.update({
+              where: { id: existingNaturalRecord.id },
+              data: {
+                date: new Date(date),
+                outputKgs: naturalOutput,
+                totalOutputKgs: Object.values(naturalOutput).reduce((sum, kg) => sum + kg, 0),
+                status: status
+              },
+              include: {
+                processing: {
+                  include: {
+                    cws: true
+                  }
+                }
+              }
+            });
+          } else {
+            // Create new record
+            naturalBaggingOff = await tx.baggingOff.create({
+              data: {
+                batchNo,
+                processingId: existingProcessing?.id || processing.id,
+                date: new Date(date),
+                outputKgs: naturalOutput,
+                totalOutputKgs: Object.values(naturalOutput).reduce((sum, kg) => sum + kg, 0),
+                processingType: 'NATURAL',
+                status: status
+              },
+              include: {
+                processing: {
+                  include: {
+                    cws: true
+                  }
+                }
+              }
+            });
+          }
           baggingOffRecords.push(naturalBaggingOff);
           break;
 
@@ -152,24 +247,55 @@ router.post('/', async (req, res) => {
                 A3: parseFloat(outputKgs.A3) || 0
               };
 
-          const fullyWashedBaggingOff = await tx.baggingOff.create({
-            data: {
+          // Check for existing FULLY WASHED record
+          const existingFWRecord = await tx.baggingOff.findFirst({
+            where: {
               batchNo,
-              processingId: existingProcessing?.id || processing.id,
-              date: new Date(date),
-              outputKgs: fullyWashedOutput,
-              totalOutputKgs: Object.values(fullyWashedOutput).reduce((sum, kg) => sum + kg, 0),
               processingType: 'FULLY WASHED',
-              status: 'COMPLETED'
-            },
-            include: {
-              processing: {
-                include: {
-                  cws: true
-                }
-              }
+              processingId: existingProcessing?.id || processing.id
             }
           });
+
+          let fullyWashedBaggingOff;
+          if (existingFWRecord) {
+            // Update existing record
+            fullyWashedBaggingOff = await tx.baggingOff.update({
+              where: { id: existingFWRecord.id },
+              data: {
+                date: new Date(date),
+                outputKgs: fullyWashedOutput,
+                totalOutputKgs: Object.values(fullyWashedOutput).reduce((sum, kg) => sum + kg, 0),
+                status: status
+              },
+              include: {
+                processing: {
+                  include: {
+                    cws: true
+                  }
+                }
+              }
+            });
+          } else {
+            // Create new record
+            fullyWashedBaggingOff = await tx.baggingOff.create({
+              data: {
+                batchNo,
+                processingId: existingProcessing?.id || processing.id,
+                date: new Date(date),
+                outputKgs: fullyWashedOutput,
+                totalOutputKgs: Object.values(fullyWashedOutput).reduce((sum, kg) => sum + kg, 0),
+                processingType: 'FULLY WASHED',
+                status: status
+              },
+              include: {
+                processing: {
+                  include: {
+                    cws: true
+                  }
+                }
+              }
+            });
+          }
           baggingOffRecords.push(fullyWashedBaggingOff);
           break;
 
@@ -206,6 +332,29 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error fetching bagging off entries:', error);
     res.status(500).json({ error: 'Failed to retrieve bagging off entries' });
+  }
+});
+
+router.get('/batch/:batchNo', async (req, res) => {
+  try {
+    const { batchNo } = req.params;
+    
+    const baggingOffs = await prisma.baggingOff.findMany({
+      where: { batchNo },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        processing: {
+          include: {
+            cws: true
+          }
+        }
+      }
+    });
+
+    res.json(baggingOffs);
+  } catch (error) {
+    console.error('Error fetching bagging offs by batch:', error);
+    res.status(500).json({ error: 'Failed to retrieve bagging offs' });
   }
 });
 
