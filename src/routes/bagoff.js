@@ -35,10 +35,22 @@ router.post('/', async (req, res) => {
     // Process the bagging off in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Only update processing status if status is COMPLETED
-      if (status === 'COMPLETED' && existingProcessing?.id) {
+      // if (status === 'COMPLETED' && existingProcessing?.id) {
+      //   await tx.processing.update({
+      //     where: { id: existingProcessing.id },
+      //     data: { 
+      //       status: 'COMPLETED',
+      //       endDate: new Date()
+      //     }
+      //   });
+      // }
+
+      // Update processing status if status is COMPLETED
+      if (status === 'COMPLETED') {
+        const processingId = existingProcessing?.id || processing.id;
         await tx.processing.update({
-          where: { id: existingProcessing.id },
-          data: { 
+          where: { id: processingId },
+          data: {
             status: 'COMPLETED',
             endDate: new Date()
           }
@@ -462,7 +474,7 @@ router.post('/', async (req, res) => {
 // router.get('/batch/:batchNo', async (req, res) => {
 //   try {
 //     const { batchNo } = req.params;
-    
+
 //     const baggingOffs = await prisma.baggingOff.findMany({
 //       where: { batchNo },
 //       include: {
@@ -476,7 +488,7 @@ router.post('/', async (req, res) => {
 //         createdAt: 'desc'
 //       }
 //     });
-    
+
 //     return res.status(200).json(baggingOffs);
 //   } catch (error) {
 //     console.error('Error fetching bagging off records:', error);
@@ -488,7 +500,7 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const baggingOff = await prisma.baggingOff.findUnique({
       where: { id: parseInt(id) },
       include: {
@@ -499,11 +511,11 @@ router.get('/:id', async (req, res) => {
         }
       }
     });
-    
+
     if (!baggingOff) {
       return res.status(404).json({ error: 'Bagging off record not found' });
     }
-    
+
     return res.status(200).json(baggingOff);
   } catch (error) {
     console.error('Error fetching bagging off record:', error);
@@ -521,24 +533,24 @@ router.put('/:id', async (req, res) => {
       status,
       notes
     } = req.body;
-    
+
     const parsedId = parseInt(id);
-    
+
     // Get the existing record to calculate total output KGs
     const existingRecord = await prisma.baggingOff.findUnique({
       where: { id: parsedId }
     });
-    
+
     if (!existingRecord) {
       return res.status(404).json({ error: 'Bagging off record not found' });
     }
-    
+
     // Calculate total output KGs
     let totalOutputKgs = 0;
     Object.values(outputKgs).forEach(value => {
       totalOutputKgs += parseFloat(value) || 0;
     });
-    
+
     const updatedBaggingOff = await prisma.baggingOff.update({
       where: { id: parsedId },
       data: {
@@ -556,7 +568,7 @@ router.put('/:id', async (req, res) => {
         }
       }
     });
-    
+
     return res.status(200).json(updatedBaggingOff);
   } catch (error) {
     console.error('Error updating bagging off record:', error);
@@ -568,11 +580,11 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     await prisma.baggingOff.delete({
       where: { id: parseInt(id) }
     });
-    
+
     return res.status(200).json({ message: 'Bagging off record deleted successfully' });
   } catch (error) {
     console.error('Error deleting bagging off record:', error);
@@ -605,15 +617,15 @@ router.get('/', async (req, res) => {
 router.get('/batch/:batchNo', async (req, res) => {
   try {
     const { batchNo } = req.params;
-    
+
     console.log(`Fetching bagging offs for batch: ${batchNo}`); // Add debug logging
-    
+
     const baggingOffs = await prisma.baggingOff.findMany({
-      where: { 
+      where: {
         batchNo: batchNo.trim() // Trim any whitespace to ensure clean comparison
       },
-      orderBy: { 
-        createdAt: 'desc' 
+      orderBy: {
+        createdAt: 'desc'
       },
       include: {
         processing: {
@@ -625,13 +637,13 @@ router.get('/batch/:batchNo', async (req, res) => {
     });
 
     console.log(`Found ${baggingOffs.length} bagging off records`); // Log count of results
-    
+
     return res.status(200).json(baggingOffs); // Use explicit return with status
   } catch (error) {
     // Improve error logging
     console.error('Error fetching bagging offs by batch:', error.message);
     console.error(error.stack);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to retrieve bagging offs',
       details: error.message // Include error details for debugging
     });
@@ -651,7 +663,7 @@ router.get('/cws/:cwsId', async (req, res) => {
         processing: {
           cwsId: cwsId
         },
-        status:"COMPLETED"
+        status: "COMPLETED"
       },
       include: {
         processing: {
