@@ -370,10 +370,9 @@ router.post('/receive', async (req, res) => {
       
       const wetTransfers = await prisma.wetTransfer.findMany({
         where: {
-          batchNo: {
-            contains: batchNo,
-            mode: 'insensitive' // Case-insensitive search
-          }
+            batchNo: {
+                contains: batchNo
+              }
         },
         include: {
           sourceCws: {
