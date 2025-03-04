@@ -38,13 +38,17 @@ router.post('/', async (req, res) => {
       // Update processing status if status is COMPLETED
       if (status === 'COMPLETED') {
         const processingId = existingProcessing?.id || processing.id;
-        await tx.processing.update({
+        console.log(`Processing ${processingId}`);
+        if(processingId){
+          await tx.processing.update({
           where: { id: processingId },
           data: {
             status: 'COMPLETED',
             endDate: new Date()
           }
         });
+        }
+        
       }
 
       let baggingOffRecords = [];
