@@ -37,7 +37,7 @@ router.post('/', async (req, res) => {
     const result = await prisma.$transaction(async (tx) => {
       // Update processing status if status is COMPLETED
       if (status === 'COMPLETED') {
-        const processingId = existingProcessing?.id || processing.id;
+        const processingId = processing.id;
         console.log(`Processing ${processingId}`);
         if(processingId){
           await tx.processing.update({
