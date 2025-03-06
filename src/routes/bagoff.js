@@ -93,12 +93,12 @@ router.post('/', async (req, res) => {
           const isSecondaryBatch = batchNo.endsWith('-2') || batchNo.endsWith('B');
 
           if (isSecondaryBatch) {
-            if (outputKgs.B1) {
-              naturalOutput.B1 = parseFloat(outputKgs.B1) || 0;
+            if (outputKgs.N1) {
+              naturalOutput.N1 = parseFloat(outputKgs.N1) || 0;
               naturalTotalKgs += naturalOutput.B1;
             }
-            if (outputKgs.B2) {
-              naturalOutput.B2 = parseFloat(outputKgs.B2) || 0;
+            if (outputKgs.N2) {
+              naturalOutput.N2 = parseFloat(outputKgs.N2) || 0;
               naturalTotalKgs += naturalOutput.B2;
             }
           } else {
