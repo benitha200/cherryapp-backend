@@ -39,16 +39,16 @@ router.post('/', async (req, res) => {
       if (status === 'COMPLETED') {
         const processingId = processing.id;
         console.log(`Processing ${processingId}`);
-        if(processingId){
+        if (processingId) {
           await tx.processing.update({
-          where: { id: processingId },
-          data: {
-            status: 'COMPLETED',
-            endDate: new Date()
-          }
-        });
+            where: { id: processingId },
+            data: {
+              status: 'COMPLETED',
+              endDate: new Date()
+            }
+          });
         }
-        
+
       }
 
       let baggingOffRecords = [];
@@ -92,24 +92,14 @@ router.post('/', async (req, res) => {
           // Handle different batch naming conventions (-1/-2 or A/B)
           const isSecondaryBatch = batchNo.endsWith('-2') || batchNo.endsWith('B');
 
-          if (isSecondaryBatch) {
-            if (outputKgs.N1) {
-              naturalOutput.N1 = parseFloat(outputKgs.N1) || 0;
-              naturalTotalKgs += naturalOutput.B1;
-            }
-            if (outputKgs.N2) {
-              naturalOutput.N2 = parseFloat(outputKgs.N2) || 0;
-              naturalTotalKgs += naturalOutput.B2;
-            }
-          } else {
-            if (outputKgs.N1) {
-              naturalOutput.N1 = parseFloat(outputKgs.N1) || 0;
-              naturalTotalKgs += naturalOutput.N1;
-            }
-            if (outputKgs.N2) {
-              naturalOutput.N2 = parseFloat(outputKgs.N2) || 0;
-              naturalTotalKgs += naturalOutput.N2;
-            }
+          // Fixed the bug: Now correctly handling N1 and N2 for both primary and secondary batches
+          if (outputKgs.N1) {
+            naturalOutput.N1 = parseFloat(outputKgs.N1) || 0;
+            naturalTotalKgs += naturalOutput.N1;
+          }
+          if (outputKgs.N2) {
+            naturalOutput.N2 = parseFloat(outputKgs.N2) || 0;
+            naturalTotalKgs += naturalOutput.N2;
           }
 
           if (naturalTotalKgs > 0) {
@@ -135,7 +125,7 @@ router.post('/', async (req, res) => {
             baggingOffRecords.push(naturalBaggingOff);
           }
           break;
-
+          
         case 'FULLY WASHED':
         case 'FULLY_WASHED':
           // Handle FULLY WASHED processing
@@ -196,7 +186,7 @@ router.post('/', async (req, res) => {
         where: { batchNo }
       });
 
-      const wetTransferUpdates = wetTransferRecords.map(record => 
+      const wetTransferUpdates = wetTransferRecords.map(record =>
         tx.wetTransfer.update({
           where: { id: record.id },
           data: {
@@ -477,24 +467,24 @@ router.put('/:id', async (req, res) => {
       status,
       notes
     } = req.body;
-    
+
     const parsedId = parseInt(id);
-    
+
     // Get the existing record to calculate total output KGs
     const existingRecord = await prisma.baggingOff.findUnique({
       where: { id: parsedId }
     });
-    
+
     if (!existingRecord) {
       return res.status(404).json({ error: 'Bagging off record not found' });
     }
-    
+
     // Calculate total output KGs
     let totalOutputKgs = 0;
     Object.values(outputKgs).forEach(value => {
       totalOutputKgs += parseFloat(value) || 0;
     });
-    
+
     // Start a transaction to update both BaggingOff and Processing
     const updatedBaggingOff = await prisma.$transaction(async (prisma) => {
       // Update the BaggingOff record
@@ -515,7 +505,7 @@ router.put('/:id', async (req, res) => {
           }
         }
       });
-      
+
       // If BaggingOff status is updated to COMPLETED, also update the associated Processing record
       if (status === 'COMPLETED') {
         await prisma.processing.update({
@@ -525,10 +515,10 @@ router.put('/:id', async (req, res) => {
           }
         });
       }
-      
+
       return updatedRecord;
     });
-    
+
     return res.status(200).json(updatedBaggingOff);
   } catch (error) {
     console.error('Error updating bagging off record:', error);
