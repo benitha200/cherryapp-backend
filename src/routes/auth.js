@@ -253,4 +253,33 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// Delete User (Admin Only)
+router.delete('/users/:id', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = parseInt(id);
+
+    // Check if user exists before attempting deletion
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Delete the user
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+
+    res.json({ 
+      message: 'User deleted successfully',
+      deletedUserId: userId
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

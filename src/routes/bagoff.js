@@ -506,17 +506,6 @@ router.put('/:id', async (req, res) => {
         }
       });
 
-      // If BaggingOff status is updated to COMPLETED, also update the associated Processing record
-      // if (status === 'COMPLETED') {
-      //   await prisma.processing.update({
-      //     where: { id: updatedRecord.processingId },
-      //     data: {
-      //       endDate:
-      //       status: 'COMPLETED'
-      //     }
-      //   });
-      // }
-
       if (status === 'COMPLETED') {
         await prisma.processing.update({
           where: { id: updatedRecord.processingId },
