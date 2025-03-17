@@ -2021,6 +2021,8 @@ router.get('/date/:date', async (req, res) => {
       }
     };
 
+    result.sort((a, b) => b.totals.totalKgs - a.totals.totalKgs);
+
     res.json({
       date: startDate,
       cwsData: result,
@@ -2409,6 +2411,8 @@ router.get('/cws-aggregated-all', async (req, res) => {
 
     // Filter out CWS with no purchases
     const filteredData = aggregatedData.filter(cws => cws.totalKgs > 0);
+
+    filteredData.sort((a, b) => b.totalKgs - a.totalKgs);
 
     // Calculate overall totals
     const overallTotals = filteredData.reduce((acc, cws) => {
