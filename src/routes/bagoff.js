@@ -693,7 +693,7 @@ router.get('/report/completed', async (req, res) => {
     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
       // Use information from the first processing record for the batch info
       const firstProcessing = processings[0];
-      const isNaturalProcessing = firstProcessing.processingType === 'Natural';
+      const isNaturalProcessing = firstProcessing.processingType === 'NATURAL';
       
       // Initialize metrics
       let totalInputKgs = 0;
@@ -710,7 +710,7 @@ router.get('/report/completed', async (req, res) => {
         overallInputKgs += inputKgs;
         
         // Add to non-Natural inputs if not Natural processing
-        if (processing.processingType !== 'Natural') {
+        if (processing.processingType !== 'NATURAL') {
           overallNonNaturalInputKgs += inputKgs;
         }
         
@@ -729,7 +729,7 @@ router.get('/report/completed', async (req, res) => {
           overallOutputKgs += outputKgs;
           
           // Add to non-Natural outputs if not Natural processing
-          if (processing.processingType !== 'Natural') {
+          if (processing.processingType !== 'NATURAL') {
             overallNonNaturalOutputKgs += outputKgs;
           }
           
@@ -1020,7 +1020,7 @@ router.get('/report/summary', async (req, res) => {
       const stationName = processing.cws?.name || 'Unknown';
       const batchNo = processing.batchNo;
       const inputKgs = processing.totalKgs || 0;
-      const isNaturalProcessing = processing.processingType === 'Natural';
+      const isNaturalProcessing = processing.processingType === 'NATURAL';
       
       // Initialize station summary if it doesn't exist
       if (!stationSummaries[stationId]) {
