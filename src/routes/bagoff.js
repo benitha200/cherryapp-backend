@@ -5,6 +5,28 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 
+async function updateProcessingStatus(batchNo, prismaClient) {
+  // Get the processing record for this batch
+  const processing = await prismaClient.processing.findFirst({
+    where: { batchNo },
+    include: { baggingOffs: true }
+  });
+  
+  if (processing && processing.status === 'IN_PROGRESS' && processing.baggingOffs.length > 0) {
+    // Update the processing status to indicate bagging off has started
+    await prismaClient.processing.update({
+      where: { id: processing.id },
+      data: {
+        status: 'BAGGING_OFF_STARTED'
+      }
+    });
+    
+    return true;
+  }
+  
+  return false;
+}
+
 router.post('/', async (req, res) => {
   try {
     const {
@@ -198,6 +220,7 @@ router.post('/', async (req, res) => {
       );
 
       await Promise.all(wetTransferUpdates);
+      await updateProcessingStatus(batchNo, tx);
 
       return baggingOffRecords.length === 1 ? baggingOffRecords[0] : baggingOffRecords;
     });
