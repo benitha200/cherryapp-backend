@@ -17,7 +17,7 @@ async function updateProcessingStatus(batchNo, prismaClient) {
     await prismaClient.processing.update({
       where: { id: processing.id },
       data: {
-        status: 'BAGGING_OFF_STARTED'
+        status: 'BAGGING_STARTED'
       }
     });
     
