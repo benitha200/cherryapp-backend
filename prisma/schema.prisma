@@ -44,7 +44,7 @@ model CWS {
   name                    String           @unique
   code                    String           @unique @default("MSH")
   location                String
-  is_wet_parchment_sender Boolean          @default(true)
+  is_wet_parchment_sender Int          @default(0)
   users                   User[]
   purchases               Purchase[]
   siteCollections         SiteCollection[]
