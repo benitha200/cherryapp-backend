@@ -993,6 +993,224 @@ router.get('/report/completed', async (req, res) => {
 
 // GET endpoint for station summary with complete processing information
 
+// router.get('/report/summary', async (req, res) => {
+//   try {
+//     const { cwsId, startDate, endDate } = req.query;
+    
+//     // Build where clause for processing records
+//     const processingWhere = {
+//       status: 'COMPLETED'
+//     };
+    
+//     if (cwsId) {
+//       processingWhere.cwsId = parseInt(cwsId);
+//     }
+    
+//     if (startDate || endDate) {
+//       processingWhere.endDate = {};
+//       if (startDate) processingWhere.endDate.gte = new Date(startDate);
+//       if (endDate) processingWhere.endDate.lte = new Date(endDate);
+//     }
+    
+//     // Get all completed processing records with their bagging off records
+//     const allProcessings = await prisma.processing.findMany({
+//       where: processingWhere,
+//       include: {
+//         cws: true,
+//         baggingOffs: {
+//           where: {
+//             status: 'COMPLETED'
+//           }
+//         }
+//       },
+//       orderBy: {
+//         endDate: 'desc'
+//       }
+//     });
+    
+//     // Initialize data structures for summaries
+//     const stationSummaries = {};
+//     const batchSummaries = {};
+//     let overallInputKgs = 0;
+//     let overallOutputKgs = 0;
+//     // Track non-Natural processing separately for outturn calculation
+//     let overallNonNaturalInputKgs = 0;
+//     let overallNonNaturalOutputKgs = 0;
+    
+//     // Process all records
+//     for (const processing of allProcessings) {
+//       const stationId = processing.cwsId;
+//       const stationName = processing.cws?.name || 'Unknown';
+//       const batchNo = processing.batchNo;
+//       const inputKgs = processing.totalKgs || 0;
+//       const isNaturalProcessing = processing.processingType === 'NATURAL';
+      
+//       // Initialize station summary if it doesn't exist
+//       if (!stationSummaries[stationId]) {
+//         stationSummaries[stationId] = {
+//           stationId,
+//           stationName,
+//           totalInputKgs: 0,
+//           totalOutputKgs: 0,
+//           nonNaturalInputKgs: 0,  // Track non-Natural inputs separately
+//           nonNaturalOutputKgs: 0, // Track non-Natural outputs separately
+//           outturn: 0,
+//           processingTypes: {},
+//           gradeBreakdown: {},
+//           processingDetails: [] // Array to store processing details by station
+//         };
+//       }
+      
+//       // Store processing details for this station
+//       stationSummaries[stationId].processingDetails.push({
+//         id: processing.id,
+//         batchNo: processing.batchNo,
+//         processingType: processing.processingType,
+//         totalKgs: processing.totalKgs,
+//         grade: processing.grade,
+//         startDate: processing.startDate,
+//         endDate: processing.endDate,
+//         status: processing.status,
+//         notes: processing.notes
+//       });
+      
+//       // Initialize batch summary with complete processing info
+//       batchSummaries[batchNo] = {
+//         batchNo,
+//         stationId,
+//         stationName,
+//         processingInfo: {
+//           id: processing.id,
+//           processingType: processing.processingType,
+//           totalKgs: processing.totalKgs,
+//           grade: processing.grade,
+//           startDate: processing.startDate,
+//           endDate: processing.endDate,
+//           status: processing.status,
+//           notes: processing.notes
+//         },
+//         inputKgs,
+//         outputKgs: 0,
+//         grades: {},
+//         outturn: 0,
+//         baggingOffSummary: [] // Array to store aggregated bagging off info
+//       };
+      
+//       // Add input KGs to station and overall totals
+//       stationSummaries[stationId].totalInputKgs += inputKgs;
+//       overallInputKgs += inputKgs;
+      
+//       // Add to non-Natural totals if not Natural processing
+//       if (!isNaturalProcessing) {
+//         stationSummaries[stationId].nonNaturalInputKgs += inputKgs;
+//         overallNonNaturalInputKgs += inputKgs;
+//       }
+      
+//       // Calculate outputs from bagging off records
+//       let batchOutputKgs = 0;
+      
+//       // Process all bagging off records for this batch
+//       for (const record of processing.baggingOffs) {
+//         const outputKgs = record.totalOutputKgs || 0;
+//         batchOutputKgs += outputKgs;
+        
+//         // Add bagging off record summary
+//         batchSummaries[batchNo].baggingOffSummary.push({
+//           id: record.id,
+//           date: record.date,
+//           processingType: record.processingType,
+//           outputKgs: record.outputKgs,
+//           totalOutputKgs: record.totalOutputKgs,
+//           status: record.status
+//         });
+        
+//         // Update processing type breakdown for station
+//         if (!stationSummaries[stationId].processingTypes[record.processingType]) {
+//           stationSummaries[stationId].processingTypes[record.processingType] = 0;
+//         }
+//         stationSummaries[stationId].processingTypes[record.processingType] += outputKgs;
+        
+//         // Update grade breakdown for batch and station
+//         if (typeof record.outputKgs === 'object' && record.outputKgs !== null) {
+//           Object.entries(record.outputKgs).forEach(([grade, kgs]) => {
+//             const gradeKgs = parseFloat(kgs) || 0;
+            
+//             // Update batch grade breakdown
+//             if (!batchSummaries[batchNo].grades[grade]) {
+//               batchSummaries[batchNo].grades[grade] = 0;
+//             }
+//             batchSummaries[batchNo].grades[grade] += gradeKgs;
+            
+//             // Update station grade breakdown
+//             if (!stationSummaries[stationId].gradeBreakdown[grade]) {
+//               stationSummaries[stationId].gradeBreakdown[grade] = 0;
+//             }
+//             stationSummaries[stationId].gradeBreakdown[grade] += gradeKgs;
+//           });
+//         }
+//       }
+      
+//       // Update batch output and outturn
+//       batchSummaries[batchNo].outputKgs = batchOutputKgs;
+//       batchSummaries[batchNo].outturn = inputKgs > 0 ? parseFloat(((batchOutputKgs / inputKgs) * 100).toFixed(2)) : 0;
+      
+//       // Update station total output
+//       stationSummaries[stationId].totalOutputKgs += batchOutputKgs;
+//       overallOutputKgs += batchOutputKgs;
+      
+//       // Add to non-Natural outputs if not Natural processing
+//       if (!isNaturalProcessing) {
+//         stationSummaries[stationId].nonNaturalOutputKgs += batchOutputKgs;
+//         overallNonNaturalOutputKgs += batchOutputKgs;
+//       }
+//     }
+    
+//     // Calculate station outturns excluding Natural processing
+//     Object.values(stationSummaries).forEach(station => {
+//       // Calculate outturn based on non-Natural processing only
+//       if (station.nonNaturalInputKgs > 0) {
+//         station.outturn = parseFloat(((station.nonNaturalOutputKgs / station.nonNaturalInputKgs) * 100).toFixed(2));
+//       }
+//     });
+    
+//     // Calculate overall outturn excluding Natural processing
+//     const overallOutturn = overallNonNaturalInputKgs > 0 
+//       ? parseFloat(((overallNonNaturalOutputKgs / overallNonNaturalInputKgs) * 100).toFixed(2))
+//       : 0;
+    
+//     // Add total batch and processing counts to each station
+//     Object.values(stationSummaries).forEach(station => {
+//       station.totalProcessings = station.processingDetails.length;
+//       station.totalBatches = [...new Set(station.processingDetails.map(p => p.batchNo))].length;
+//     });
+    
+//     // Build the summary report
+//     const report = {
+//       overall: {
+//         totalInputKgs: overallInputKgs,
+//         totalOutputKgs: overallOutputKgs,
+//         totalNonNaturalInputKgs: overallNonNaturalInputKgs,
+//         totalNonNaturalOutputKgs: overallNonNaturalOutputKgs,
+//         overallOutturn: overallOutturn,
+//         totalStations: Object.keys(stationSummaries).length,
+//         totalBatches: Object.keys(batchSummaries).length,
+//         totalProcessings: allProcessings.length,
+//         dateRange: {
+//           startDate: startDate || "All time",
+//           endDate: endDate || "Present"
+//         }
+//       },
+//       stationSummaries: Object.values(stationSummaries),
+//       batchSummaries: Object.values(batchSummaries)
+//     };
+    
+//     return res.status(200).json(report);
+//   } catch (error) {
+//     console.error('Error generating summary report:', error);
+//     return res.status(500).json({ error: error.message });
+//   }
+// });
+
 router.get('/report/summary', async (req, res) => {
   try {
     const { cwsId, startDate, endDate } = req.query;
@@ -1028,12 +1246,31 @@ router.get('/report/summary', async (req, res) => {
       }
     });
     
+    // Group processings by batch prefix to identify batches with both NATURAL and FULLY_WASHED
+    const batchGroups = {};
+    allProcessings.forEach(processing => {
+      const batchPrefix = processing.batchNo.split('-')[0];
+      if (!batchGroups[batchPrefix]) {
+        batchGroups[batchPrefix] = [];
+      }
+      batchGroups[batchPrefix].push(processing);
+    });
+    
+    // Identify batch prefixes that have NATURAL processing
+    const batchesWithNatural = new Set();
+    Object.entries(batchGroups).forEach(([prefix, processings]) => {
+      if (processings.some(p => p.processingType === 'NATURAL')) {
+        batchesWithNatural.add(prefix);
+      }
+    });
+    
     // Initialize data structures for summaries
     const stationSummaries = {};
     const batchSummaries = {};
     let overallInputKgs = 0;
     let overallOutputKgs = 0;
-    // Track non-Natural processing separately for outturn calculation
+    let overallNaturalInputKgs = 0;
+    let overallNaturalOutputKgs = 0;
     let overallNonNaturalInputKgs = 0;
     let overallNonNaturalOutputKgs = 0;
     
@@ -1042,8 +1279,14 @@ router.get('/report/summary', async (req, res) => {
       const stationId = processing.cwsId;
       const stationName = processing.cws?.name || 'Unknown';
       const batchNo = processing.batchNo;
+      const batchPrefix = batchNo.split('-')[0];
       const inputKgs = processing.totalKgs || 0;
-      const isNaturalProcessing = processing.processingType === 'NATURAL';
+      
+      // Check if this batch should be treated as NATURAL
+      // Either it's already NATURAL or it belongs to a batch that has NATURAL processing
+      const shouldTreatAsNatural = 
+        processing.processingType === 'NATURAL' || 
+        batchesWithNatural.has(batchPrefix);
       
       // Initialize station summary if it doesn't exist
       if (!stationSummaries[stationId]) {
@@ -1052,12 +1295,14 @@ router.get('/report/summary', async (req, res) => {
           stationName,
           totalInputKgs: 0,
           totalOutputKgs: 0,
-          nonNaturalInputKgs: 0,  // Track non-Natural inputs separately
-          nonNaturalOutputKgs: 0, // Track non-Natural outputs separately
+          naturalInputKgs: 0,
+          naturalOutputKgs: 0,
+          nonNaturalInputKgs: 0,
+          nonNaturalOutputKgs: 0,
           outturn: 0,
           processingTypes: {},
           gradeBreakdown: {},
-          processingDetails: [] // Array to store processing details by station
+          processingDetails: []
         };
       }
       
@@ -1066,6 +1311,7 @@ router.get('/report/summary', async (req, res) => {
         id: processing.id,
         batchNo: processing.batchNo,
         processingType: processing.processingType,
+        treatedAsNatural: shouldTreatAsNatural,
         totalKgs: processing.totalKgs,
         grade: processing.grade,
         startDate: processing.startDate,
@@ -1077,11 +1323,13 @@ router.get('/report/summary', async (req, res) => {
       // Initialize batch summary with complete processing info
       batchSummaries[batchNo] = {
         batchNo,
+        batchPrefix,
         stationId,
         stationName,
         processingInfo: {
           id: processing.id,
           processingType: processing.processingType,
+          treatedAsNatural: shouldTreatAsNatural,
           totalKgs: processing.totalKgs,
           grade: processing.grade,
           startDate: processing.startDate,
@@ -1093,15 +1341,18 @@ router.get('/report/summary', async (req, res) => {
         outputKgs: 0,
         grades: {},
         outturn: 0,
-        baggingOffSummary: [] // Array to store aggregated bagging off info
+        baggingOffSummary: []
       };
       
       // Add input KGs to station and overall totals
       stationSummaries[stationId].totalInputKgs += inputKgs;
       overallInputKgs += inputKgs;
       
-      // Add to non-Natural totals if not Natural processing
-      if (!isNaturalProcessing) {
+      // Add to natural or non-natural totals based on our treatment logic
+      if (shouldTreatAsNatural) {
+        stationSummaries[stationId].naturalInputKgs += inputKgs;
+        overallNaturalInputKgs += inputKgs;
+      } else {
         stationSummaries[stationId].nonNaturalInputKgs += inputKgs;
         overallNonNaturalInputKgs += inputKgs;
       }
@@ -1158,8 +1409,11 @@ router.get('/report/summary', async (req, res) => {
       stationSummaries[stationId].totalOutputKgs += batchOutputKgs;
       overallOutputKgs += batchOutputKgs;
       
-      // Add to non-Natural outputs if not Natural processing
-      if (!isNaturalProcessing) {
+      // Add to natural or non-natural outputs based on our treatment logic
+      if (shouldTreatAsNatural) {
+        stationSummaries[stationId].naturalOutputKgs += batchOutputKgs;
+        overallNaturalOutputKgs += batchOutputKgs;
+      } else {
         stationSummaries[stationId].nonNaturalOutputKgs += batchOutputKgs;
         overallNonNaturalOutputKgs += batchOutputKgs;
       }
@@ -1189,8 +1443,10 @@ router.get('/report/summary', async (req, res) => {
       overall: {
         totalInputKgs: overallInputKgs,
         totalOutputKgs: overallOutputKgs,
-        totalNonNaturalInputKgs: overallNonNaturalInputKgs,
-        totalNonNaturalOutputKgs: overallNonNaturalOutputKgs,
+        naturalInputKgs: overallNaturalInputKgs,
+        naturalOutputKgs: overallNaturalOutputKgs,
+        nonNaturalInputKgs: overallNonNaturalInputKgs,
+        nonNaturalOutputKgs: overallNonNaturalOutputKgs,
         overallOutturn: overallOutturn,
         totalStations: Object.keys(stationSummaries).length,
         totalBatches: Object.keys(batchSummaries).length,
@@ -1210,203 +1466,5 @@ router.get('/report/summary', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
-
-
-// router.get('/report/summary', async (req, res) => {
-//   try {
-//     const { cwsId, startDate, endDate } = req.query;
-    
-//     // Build where clause for processing records
-//     const processingWhere = {
-//       status: 'COMPLETED'
-//     };
-    
-//     if (cwsId) {
-//       processingWhere.cwsId = parseInt(cwsId);
-//     }
-    
-//     if (startDate || endDate) {
-//       processingWhere.endDate = {};
-//       if (startDate) processingWhere.endDate.gte = new Date(startDate);
-//       if (endDate) processingWhere.endDate.lte = new Date(endDate);
-//     }
-    
-//     // Get all completed processing records with their bagging off records
-//     const allProcessings = await prisma.processing.findMany({
-//       where: processingWhere,
-//       include: {
-//         cws: true,
-//         baggingOffs: {
-//           where: {
-//             status: 'COMPLETED'
-//           }
-//         }
-//       },
-//       orderBy: {
-//         endDate: 'desc'
-//       }
-//     });
-    
-//     // Initialize data structures for summaries
-//     const stationSummaries = {};
-//     const batchSummaries = {};
-//     let overallInputKgs = 0;
-//     let overallOutputKgs = 0;
-    
-//     // Process all records
-//     for (const processing of allProcessings) {
-//       const stationId = processing.cwsId;
-//       const stationName = processing.cws?.name || 'Unknown';
-//       const batchNo = processing.batchNo;
-//       const inputKgs = processing.totalKgs || 0;
-      
-//       // Initialize station summary if it doesn't exist
-//       if (!stationSummaries[stationId]) {
-//         stationSummaries[stationId] = {
-//           stationId,
-//           stationName,
-//           totalInputKgs: 0,
-//           totalOutputKgs: 0,
-//           outturn: 0,
-//           processingTypes: {},
-//           gradeBreakdown: {},
-//           processingDetails: [] // Array to store processing details by station
-//         };
-//       }
-      
-//       // Store processing details for this station
-//       stationSummaries[stationId].processingDetails.push({
-//         id: processing.id,
-//         batchNo: processing.batchNo,
-//         processingType: processing.processingType,
-//         totalKgs: processing.totalKgs,
-//         grade: processing.grade,
-//         startDate: processing.startDate,
-//         endDate: processing.endDate,
-//         status: processing.status,
-//         notes: processing.notes
-//       });
-      
-//       // Initialize batch summary with complete processing info
-//       batchSummaries[batchNo] = {
-//         batchNo,
-//         stationId,
-//         stationName,
-//         processingInfo: {
-//           id: processing.id,
-//           processingType: processing.processingType,
-//           totalKgs: processing.totalKgs,
-//           grade: processing.grade,
-//           startDate: processing.startDate,
-//           endDate: processing.endDate,
-//           status: processing.status,
-//           notes: processing.notes
-//         },
-//         inputKgs,
-//         outputKgs: 0,
-//         grades: {},
-//         outturn: 0,
-//         baggingOffSummary: [] // Array to store aggregated bagging off info
-//       };
-      
-//       // Add input KGs to station and overall totals
-//       stationSummaries[stationId].totalInputKgs += inputKgs;
-//       overallInputKgs += inputKgs;
-      
-//       // Calculate outputs from bagging off records
-//       let batchOutputKgs = 0;
-      
-//       // Process all bagging off records for this batch
-//       for (const record of processing.baggingOffs) {
-//         const outputKgs = record.totalOutputKgs || 0;
-//         batchOutputKgs += outputKgs;
-        
-//         // Add bagging off record summary
-//         batchSummaries[batchNo].baggingOffSummary.push({
-//           id: record.id,
-//           date: record.date,
-//           processingType: record.processingType,
-//           outputKgs: record.outputKgs,
-//           totalOutputKgs: record.totalOutputKgs,
-//           status: record.status
-//         });
-        
-//         // Update processing type breakdown for station
-//         if (!stationSummaries[stationId].processingTypes[record.processingType]) {
-//           stationSummaries[stationId].processingTypes[record.processingType] = 0;
-//         }
-//         stationSummaries[stationId].processingTypes[record.processingType] += outputKgs;
-        
-//         // Update grade breakdown for batch and station
-//         if (typeof record.outputKgs === 'object' && record.outputKgs !== null) {
-//           Object.entries(record.outputKgs).forEach(([grade, kgs]) => {
-//             const gradeKgs = parseFloat(kgs) || 0;
-            
-//             // Update batch grade breakdown
-//             if (!batchSummaries[batchNo].grades[grade]) {
-//               batchSummaries[batchNo].grades[grade] = 0;
-//             }
-//             batchSummaries[batchNo].grades[grade] += gradeKgs;
-            
-//             // Update station grade breakdown
-//             if (!stationSummaries[stationId].gradeBreakdown[grade]) {
-//               stationSummaries[stationId].gradeBreakdown[grade] = 0;
-//             }
-//             stationSummaries[stationId].gradeBreakdown[grade] += gradeKgs;
-//           });
-//         }
-//       }
-      
-//       // Update batch output and outturn
-//       batchSummaries[batchNo].outputKgs = batchOutputKgs;
-//       batchSummaries[batchNo].outturn = inputKgs > 0 ? parseFloat(((batchOutputKgs / inputKgs) * 100).toFixed(2)) : 0;
-      
-//       // Update station total output
-//       stationSummaries[stationId].totalOutputKgs += batchOutputKgs;
-//       overallOutputKgs += batchOutputKgs;
-//     }
-    
-//     // Calculate station outturns
-//     Object.values(stationSummaries).forEach(station => {
-//       if (station.totalInputKgs > 0) {
-//         station.outturn = parseFloat(((station.totalOutputKgs / station.totalInputKgs) * 100).toFixed(2));
-//       }
-//     });
-    
-//     // Calculate overall outturn
-//     const overallOutturn = overallInputKgs > 0 
-//       ? parseFloat(((overallOutputKgs / overallInputKgs) * 100).toFixed(2))
-//       : 0;
-    
-//     // Add total batch and processing counts to each station
-//     Object.values(stationSummaries).forEach(station => {
-//       station.totalProcessings = station.processingDetails.length;
-//       station.totalBatches = [...new Set(station.processingDetails.map(p => p.batchNo))].length;
-//     });
-    
-//     // Build the summary report
-//     const report = {
-//       overall: {
-//         totalInputKgs: overallInputKgs,
-//         totalOutputKgs: overallOutputKgs,
-//         overallOutturn: overallOutturn,
-//         totalStations: Object.keys(stationSummaries).length,
-//         totalBatches: Object.keys(batchSummaries).length,
-//         totalProcessings: allProcessings.length,
-//         dateRange: {
-//           startDate: startDate || "All time",
-//           endDate: endDate || "Present"
-//         }
-//       },
-//       stationSummaries: Object.values(stationSummaries),
-//       batchSummaries: Object.values(batchSummaries)
-//     };
-    
-//     return res.status(200).json(report);
-//   } catch (error) {
-//     console.error('Error generating summary report:', error);
-//     return res.status(500).json({ error: error.message });
-//   }
-// });
 
 export default router;
