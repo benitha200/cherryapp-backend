@@ -658,6 +658,7 @@ router.get('/cws/:cwsId', async (req, res) => {
 
 // GET endpoint for completed processing reports with accurate grouping by base batch number
 
+
 router.get('/report/completed', async (req, res) => {
   try {
     // Get all completed processing records
@@ -716,7 +717,7 @@ router.get('/report/completed', async (req, res) => {
     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
       // Use information from the first processing record for the batch info
       const firstProcessing = processings[0];
-      const isNaturalProcessing = firstProcessing.processingType === 'NATURAL';
+      const isNaturalProcessing = processings.some(p => p.processingType === 'NATURAL');
       
       // Initialize metrics
       let totalInputKgs = 0;
@@ -732,8 +733,8 @@ router.get('/report/completed', async (req, res) => {
         totalInputKgs += inputKgs;
         overallInputKgs += inputKgs;
         
-        // Add to non-Natural inputs if not Natural processing
-        if (processing.processingType !== 'NATURAL') {
+        // Add to non-Natural inputs if batch is not considered Natural
+        if (!isNaturalProcessing) {
           overallNonNaturalInputKgs += inputKgs;
         }
         
@@ -751,8 +752,8 @@ router.get('/report/completed', async (req, res) => {
           totalOutputKgs += outputKgs;
           overallOutputKgs += outputKgs;
           
-          // Add to non-Natural outputs if not Natural processing
-          if (processing.processingType !== 'NATURAL') {
+          // Add to non-Natural outputs if batch is not considered Natural
+          if (!isNaturalProcessing) {
             overallNonNaturalOutputKgs += outputKgs;
           }
           
@@ -786,7 +787,7 @@ router.get('/report/completed', async (req, res) => {
           batchNo: baseBatchNo, // Use the base batch number
           relatedBatches: processings.map(p => p.batchNo), // List all related batch numbers
           station: firstProcessing.cws?.name || 'Unknown',
-          processingType: processings.some(p => p.processingType === 'NATURAL') ? 'NATURAL' : firstProcessing.processingType,
+          processingType: isNaturalProcessing ? 'NATURAL' : firstProcessing.processingType,
           startDate: firstProcessing.startDate,
           endDate: firstProcessing.endDate,
           status: firstProcessing.status,
@@ -796,7 +797,7 @@ router.get('/report/completed', async (req, res) => {
           processingInfo: {
             id: firstProcessing.id,
             batchNo: firstProcessing.batchNo,
-            processingType: firstProcessing.processingType,
+            processingType: isNaturalProcessing ? 'NATURAL' : firstProcessing.processingType,
             totalKgs: totalInputKgs,
             grade: firstProcessing.grade,
             status: firstProcessing.status,
@@ -843,6 +844,192 @@ router.get('/report/completed', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
+
+// router.get('/report/completed', async (req, res) => {
+//   try {
+//     // Get all completed processing records
+//     const completedProcessings = await prisma.processing.findMany({
+//       where: { 
+//         status: 'COMPLETED'
+//       },
+//       include: {
+//         cws: true,
+//         baggingOffs: {
+//           where: {
+//             status: 'COMPLETED'
+//           },
+//           include: {
+//             processing: true
+//           }
+//         }
+//       },
+//       orderBy: {
+//         endDate: 'desc'
+//       }
+//     });
+    
+//     if (completedProcessings.length === 0) {
+//       return res.status(200).json({ 
+//         message: 'No completed processing records found',
+//         reports: []
+//       });
+//     }
+    
+//     // Group processing records by their base batch number (first 9 characters)
+//     const groupedProcessings = {};
+    
+//     // Track overall metrics
+//     let overallInputKgs = 0;
+//     let overallOutputKgs = 0;
+//     let overallNonNaturalInputKgs = 0;
+//     let overallNonNaturalOutputKgs = 0;
+    
+//     for (const processing of completedProcessings) {
+//       // Extract the base batch number (first 9 characters)
+//       const baseBatchNo = processing.batchNo.substring(0, 9);
+      
+//       // Initialize group if it doesn't exist
+//       if (!groupedProcessings[baseBatchNo]) {
+//         groupedProcessings[baseBatchNo] = [];
+//       }
+      
+//       // Add processing to its group
+//       groupedProcessings[baseBatchNo].push(processing);
+//     }
+    
+//     // Generate reports for each batch group
+//     const reports = [];
+    
+//     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
+//       // Use information from the first processing record for the batch info
+//       const firstProcessing = processings[0];
+//       const isNaturalProcessing = firstProcessing.processingType === 'NATURAL';
+      
+//       // Initialize metrics
+//       let totalInputKgs = 0;
+//       let totalOutputKgs = 0;
+//       const outputByType = {};
+//       const gradeBreakdown = {};
+//       const allBaggingOffRecords = [];
+      
+//       // Combine data from all processing records in this group
+//       for (const processing of processings) {
+//         // Add input KGs
+//         const inputKgs = processing.totalKgs || 0;
+//         totalInputKgs += inputKgs;
+//         overallInputKgs += inputKgs;
+        
+//         // Add to non-Natural inputs if not Natural processing
+//         if (processing.processingType !== 'NATURAL') {
+//           overallNonNaturalInputKgs += inputKgs;
+//         }
+        
+//         // Process all bagging off records
+//         for (const record of processing.baggingOffs) {
+//           const outputKgs = parseFloat(record.totalOutputKgs) || 0;
+          
+//           // Add output KGs by type
+//           if (!outputByType[record.processingType]) {
+//             outputByType[record.processingType] = 0;
+//           }
+//           outputByType[record.processingType] += outputKgs;
+          
+//           // Add to total output
+//           totalOutputKgs += outputKgs;
+//           overallOutputKgs += outputKgs;
+          
+//           // Add to non-Natural outputs if not Natural processing
+//           if (processing.processingType !== 'NATURAL') {
+//             overallNonNaturalOutputKgs += outputKgs;
+//           }
+          
+//           // Process grade breakdown
+//           if (typeof record.outputKgs === 'object' && record.outputKgs !== null) {
+//             Object.entries(record.outputKgs).forEach(([grade, kgs]) => {
+//               if (!gradeBreakdown[grade]) {
+//                 gradeBreakdown[grade] = 0;
+//               }
+//               gradeBreakdown[grade] += parseFloat(kgs) || 0;
+//             });
+//           }
+          
+//           // Remove circular references
+//           const { baggingOffs, ...processingWithoutBaggingOffs } = record.processing;
+          
+//           // Add enhanced record to the list
+//           allBaggingOffRecords.push({
+//             ...record,
+//             processingInfo: processingWithoutBaggingOffs
+//           });
+//         }
+//       }
+      
+//       // Calculate outturn
+//       const outturn = totalInputKgs > 0 ? ((totalOutputKgs / totalInputKgs) * 100).toFixed(2) : 0;
+      
+//       // Create the report for this batch group
+//       const report = {
+//         batchInfo: {
+//           batchNo: baseBatchNo, // Use the base batch number
+//           relatedBatches: processings.map(p => p.batchNo), // List all related batch numbers
+//           station: firstProcessing.cws?.name || 'Unknown',
+//           processingType: processings.some(p => p.processingType === 'NATURAL') ? 'NATURAL' : firstProcessing.processingType,
+//           startDate: firstProcessing.startDate,
+//           endDate: firstProcessing.endDate,
+//           status: firstProcessing.status,
+//           totalInputKgs: totalInputKgs,
+//           totalOutputKgs: totalOutputKgs,
+//           outturn: parseFloat(outturn),
+//           processingInfo: {
+//             id: firstProcessing.id,
+//             batchNo: firstProcessing.batchNo,
+//             processingType: firstProcessing.processingType,
+//             totalKgs: totalInputKgs,
+//             grade: firstProcessing.grade,
+//             status: firstProcessing.status,
+//             notes: firstProcessing.notes
+//           }
+//         },
+//         metrics: {
+//           inputKgs: totalInputKgs,
+//           totalOutputKgs,
+//           outturn: parseFloat(outturn),
+//           outputByType,
+//           gradeBreakdown
+//         },
+//         baggingOffRecords: allBaggingOffRecords
+//       };
+      
+//       reports.push(report);
+//     }
+    
+//     // Calculate overall outturn (both standard and non-Natural)
+//     const overallOutturn = overallInputKgs > 0 
+//       ? parseFloat(((overallOutputKgs / overallInputKgs) * 100).toFixed(2)) 
+//       : 0;
+    
+//     // Calculate overall outturn excluding Natural processing
+//     const overallNonNaturalOutturn = overallNonNaturalInputKgs > 0 
+//       ? parseFloat(((overallNonNaturalOutputKgs / overallNonNaturalInputKgs) * 100).toFixed(2)) 
+//       : 0;
+    
+//     return res.status(200).json({ 
+//       totalRecords: reports.length,
+//       overallMetrics: {
+//         totalInputKgs: overallInputKgs,
+//         totalOutputKgs: overallOutputKgs,
+//         overallOutturn: overallOutturn,
+//         totalNonNaturalInputKgs: overallNonNaturalInputKgs,
+//         totalNonNaturalOutputKgs: overallNonNaturalOutputKgs,
+//         overallNonNaturalOutturn: overallNonNaturalOutturn
+//       },
+//       reports 
+//     });
+//   } catch (error) {
+//     console.error('Error generating completed processing reports:', error);
+//     return res.status(500).json({ error: error.message });
+//   }
+// });
 
 // router.get('/report/completed', async (req, res) => {
 //   try {
