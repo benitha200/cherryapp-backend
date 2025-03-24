@@ -786,18 +786,18 @@ router.get('/report/completed', async (req, res) => {
           batchNo: baseBatchNo, // Use the base batch number
           relatedBatches: processings.map(p => p.batchNo), // List all related batch numbers
           station: firstProcessing.cws?.name || 'Unknown',
-          processingType: firstProcessing.processingType,
+          processingType: processings.some(p => p.processingType === 'NATURAL') ? 'NATURAL' : firstProcessing.processingType,
           startDate: firstProcessing.startDate,
           endDate: firstProcessing.endDate,
           status: firstProcessing.status,
-          totalInputKgs: totalInputKgs, // Added total input KGs to batch info
-          totalOutputKgs: totalOutputKgs, // Added total output KGs to batch info
-          outturn: parseFloat(outturn), // Added outturn to batch info
+          totalInputKgs: totalInputKgs,
+          totalOutputKgs: totalOutputKgs,
+          outturn: parseFloat(outturn),
           processingInfo: {
             id: firstProcessing.id,
             batchNo: firstProcessing.batchNo,
             processingType: firstProcessing.processingType,
-            totalKgs: totalInputKgs, // Use combined total KGs
+            totalKgs: totalInputKgs,
             grade: firstProcessing.grade,
             status: firstProcessing.status,
             notes: firstProcessing.notes
