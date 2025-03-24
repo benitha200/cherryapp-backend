@@ -402,6 +402,45 @@ router.get('/batch/:batchNo', async (req, res) => {
   }
 });
 
+
+// Get all CWS mappings
+
+router.get('/cws-mappings', async (req, res) => {
+  try {
+    const mappings = await prisma.cWSMapping.findMany({
+      include: {
+        senderCws: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        receivingCws: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        }
+      }
+    });
+
+    // Format the response to match the expected structure in the frontend
+    const formattedMappings = mappings.map(mapping => ({
+      senderCws: mapping.senderCws.name,
+      receivingCws: mapping.receivingCws.name,
+      senderCwsId: mapping.senderCwsId,
+      receivingCwsId: mapping.receivingCwsId
+    }));
+
+    res.json(formattedMappings);
+  } catch (error) {
+    console.error('Error fetching CWS mappings:', error);
+    res.status(500).json({ message: "Failed to fetch CWS mappings", error: error.message });
+  }
+});
+
 // Get a specific wet transfer by ID
 router.get('/:id', async (req, res) => {
   try {
@@ -571,41 +610,5 @@ router.post('/map-cws', async (req, res) => {
   }
 });
 
-// Get all CWS mappings
-router.get('/cws-mappings', async (req, res) => {
-  try {
-    const mappings = await prisma.cWSMapping.findMany({
-      include: {
-        senderCws: {
-          select: {
-            id: true,
-            name: true,
-            code: true
-          }
-        },
-        receivingCws: {
-          select: {
-            id: true,
-            name: true,
-            code: true
-          }
-        }
-      }
-    });
-
-    // Format the response to match the expected structure in the frontend
-    const formattedMappings = mappings.map(mapping => ({
-      senderCws: mapping.senderCws.name,
-      receivingCws: mapping.receivingCws.name,
-      senderCwsId: mapping.senderCwsId,
-      receivingCwsId: mapping.receivingCwsId
-    }));
-
-    res.json(formattedMappings);
-  } catch (error) {
-    console.error('Error fetching CWS mappings:', error);
-    res.status(500).json({ message: "Failed to fetch CWS mappings", error: error.message });
-  }
-});
 
 export default router;
