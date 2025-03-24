@@ -715,9 +715,33 @@ router.get('/report/completed', async (req, res) => {
     const reports = [];
     
     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
-      // Use information from the first processing record for the batch info
-      const firstProcessing = processings[0];
+      // Determine if this batch has any natural processing
       const isNaturalProcessing = processings.some(p => p.processingType === 'NATURAL');
+      
+      // Determine the predominant processing type if not natural
+      let predominantProcessingType = 'UNKNOWN';
+      if (!isNaturalProcessing) {
+        // Count occurrences of each processing type
+        const typeCount = {};
+        for (const processing of processings) {
+          if (!typeCount[processing.processingType]) {
+            typeCount[processing.processingType] = 0;
+          }
+          typeCount[processing.processingType]++;
+        }
+        
+        // Find the most common type
+        let maxCount = 0;
+        for (const [type, count] of Object.entries(typeCount)) {
+          if (count > maxCount) {
+            maxCount = count;
+            predominantProcessingType = type;
+          }
+        }
+      }
+      
+      // Set the batch processing type (Natural takes precedence, otherwise use predominant type)
+      const batchProcessingType = isNaturalProcessing ? 'NATURAL' : predominantProcessingType;
       
       // Initialize metrics
       let totalInputKgs = 0;
@@ -781,13 +805,16 @@ router.get('/report/completed', async (req, res) => {
       // Calculate outturn
       const outturn = totalInputKgs > 0 ? ((totalOutputKgs / totalInputKgs) * 100).toFixed(2) : 0;
       
+      // Use the first processing for date and station info
+      const firstProcessing = processings[0];
+      
       // Create the report for this batch group
       const report = {
         batchInfo: {
           batchNo: baseBatchNo, // Use the base batch number
           relatedBatches: processings.map(p => p.batchNo), // List all related batch numbers
           station: firstProcessing.cws?.name || 'Unknown',
-          processingType: isNaturalProcessing ? 'NATURAL' : firstProcessing.processingType,
+          processingType: batchProcessingType,
           startDate: firstProcessing.startDate,
           endDate: firstProcessing.endDate,
           status: firstProcessing.status,
@@ -797,7 +824,7 @@ router.get('/report/completed', async (req, res) => {
           processingInfo: {
             id: firstProcessing.id,
             batchNo: firstProcessing.batchNo,
-            processingType: isNaturalProcessing ? 'NATURAL' : firstProcessing.processingType,
+            processingType: batchProcessingType,
             totalKgs: totalInputKgs,
             grade: firstProcessing.grade,
             status: firstProcessing.status,
@@ -844,7 +871,6 @@ router.get('/report/completed', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
-
 // router.get('/report/completed', async (req, res) => {
 //   try {
 //     // Get all completed processing records
