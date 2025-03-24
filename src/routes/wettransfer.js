@@ -505,4 +505,65 @@ router.delete('/:id',  async (req, res) => {
   }
 });
 
+router.post('/map-cws', async (req, res) => {
+  try {
+    const { mappings } = req.body;
+
+    // Validate request
+    if (!mappings || !Array.isArray(mappings)) {
+      return res.status(400).json({ message: "Invalid request. 'mappings' must be an array." });
+    }
+
+    // Validate each mapping
+    for (const mapping of mappings) {
+      if (!mapping.senderCws || !mapping.receivingCws) {
+        return res.status(400).json({ message: "Each mapping must contain 'senderCws' and 'receivingCws'." });
+      }
+    }
+
+    // Fetch all CWS from the database to validate the names
+    const allCws = await prisma.cWS.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    // Create a map of CWS names to IDs for quick lookup
+    const cwsNameToId = allCws.reduce((map, cws) => {
+      map[cws.name] = cws.id;
+      return map;
+    }, {});
+
+    // Process each mapping
+    const mappedResults = [];
+    for (const mapping of mappings) {
+      const senderCwsId = cwsNameToId[mapping.senderCws];
+      const receivingCwsId = cwsNameToId[mapping.receivingCws];
+
+      if (!senderCwsId || !receivingCwsId) {
+        return res.status(400).json({ message: `Invalid CWS name in mapping: ${mapping.senderCws} -> ${mapping.receivingCws}` });
+      }
+
+      // Store the mapping (you can create a new model for this if needed)
+      // For now, we'll just log it or store it in a simple table
+      mappedResults.push({
+        senderCws: mapping.senderCws,
+        receivingCws: mapping.receivingCws,
+        senderCwsId,
+        receivingCwsId,
+      });
+    }
+
+    // Save mappings to the database (if you have a model for this)
+    // Example: await prisma.cwsMapping.createMany({ data: mappedResults });
+    await prisma.cwsMapping.createMany({ data: mappedResults });
+
+    res.status(201).json({ message: "CWS mappings processed successfully", results: mappedResults });
+  } catch (error) {
+    console.error('Error mapping CWS:', error);
+    res.status(500).json({ message: "Failed to map CWS", error: error.message });
+  }
+});
+
 export default router;

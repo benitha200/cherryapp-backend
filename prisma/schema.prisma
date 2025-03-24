@@ -53,6 +53,8 @@ model CWS {
   pricing                 CWSPricing[]
   sourceTransfers         WetTransfer[]    @relation("SourceCWS")
   destinationTransfers    WetTransfer[]    @relation("DestinationCWS")
+  senderMappings          CWSMapping[]     @relation("SenderCWS")
+  receiverMappings        CWSMapping[]     @relation("ReceivingCWS")
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
 }
@@ -181,4 +183,14 @@ model SiteCollectionFees {
   transportFee     Float
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+}
+
+model CWSMapping {
+  id              Int      @id @default(autoincrement())
+  senderCwsId     Int
+  senderCws       CWS      @relation("SenderCWS", fields: [senderCwsId], references: [id])
+  receivingCwsId  Int
+  receivingCws    CWS      @relation("ReceivingCWS", fields: [receivingCwsId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
