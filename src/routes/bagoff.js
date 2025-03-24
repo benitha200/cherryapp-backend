@@ -661,7 +661,24 @@ router.get('/cws/:cwsId', async (req, res) => {
 
 router.get('/report/completed', async (req, res) => {
   try {
-    // Get all completed processing records
+    // FIRST QUERY: Get ALL processing records (regardless of status) to identify NATURAL batches
+    const allProcessingRecords = await prisma.processing.findMany({
+      select: {
+        batchNo: true,
+        processingType: true
+      }
+    });
+    
+    // Identify batch prefixes that have NATURAL processing (regardless of completion status)
+    const batchesWithNatural = new Set();
+    allProcessingRecords.forEach(processing => {
+      const batchPrefix = processing.batchNo.substring(0, 9);
+      if (processing.processingType === 'NATURAL') {
+        batchesWithNatural.add(batchPrefix);
+      }
+    });
+
+    // SECOND QUERY: Get all completed processing records
     const completedProcessings = await prisma.processing.findMany({
       where: {
         status: 'COMPLETED'
@@ -695,6 +712,8 @@ router.get('/report/completed', async (req, res) => {
     // Track overall metrics
     let overallInputKgs = 0;
     let overallOutputKgs = 0;
+    let overallNaturalInputKgs = 0;
+    let overallNaturalOutputKgs = 0;
     let overallNonNaturalInputKgs = 0;
     let overallNonNaturalOutputKgs = 0;
 
@@ -715,12 +734,12 @@ router.get('/report/completed', async (req, res) => {
     const reports = [];
 
     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
-      // Determine if this batch has any natural processing
-      const isNaturalProcessing = processings.some(p => p.processingType === 'NATURAL');
-
+      // Check if this batch prefix has any NATURAL processing (completed or not)
+      const hasNaturalProcessing = batchesWithNatural.has(baseBatchNo);
+      
       // Determine the predominant processing type if not natural
       let predominantProcessingType = 'UNKNOWN';
-      if (!isNaturalProcessing) {
+      if (!hasNaturalProcessing) {
         // Count occurrences of each processing type
         const typeCount = {};
         for (const processing of processings) {
@@ -741,7 +760,7 @@ router.get('/report/completed', async (req, res) => {
       }
 
       // Set the batch processing type (Natural takes precedence, otherwise use predominant type)
-      const batchProcessingType = isNaturalProcessing ? 'NATURAL' : predominantProcessingType;
+      const batchProcessingType = hasNaturalProcessing ? 'NATURAL' : predominantProcessingType;
 
       // Initialize metrics
       let totalInputKgs = 0;
@@ -757,8 +776,10 @@ router.get('/report/completed', async (req, res) => {
         totalInputKgs += inputKgs;
         overallInputKgs += inputKgs;
 
-        // Add to non-Natural inputs if batch is not considered Natural
-        if (!isNaturalProcessing) {
+        // Add to natural or non-natural inputs based on batch type
+        if (hasNaturalProcessing) {
+          overallNaturalInputKgs += inputKgs;
+        } else {
           overallNonNaturalInputKgs += inputKgs;
         }
 
@@ -776,8 +797,10 @@ router.get('/report/completed', async (req, res) => {
           totalOutputKgs += outputKgs;
           overallOutputKgs += outputKgs;
 
-          // Add to non-Natural outputs if batch is not considered Natural
-          if (!isNaturalProcessing) {
+          // Add to natural or non-natural outputs based on batch type
+          if (hasNaturalProcessing) {
+            overallNaturalOutputKgs += outputKgs;
+          } else {
             overallNonNaturalOutputKgs += outputKgs;
           }
 
@@ -821,6 +844,7 @@ router.get('/report/completed', async (req, res) => {
           totalInputKgs: totalInputKgs,
           totalOutputKgs: totalOutputKgs,
           outturn: parseFloat(outturn),
+          isNatural: hasNaturalProcessing, // Add a flag to clearly indicate NATURAL classification
           processingInfo: {
             id: firstProcessing.id,
             batchNo: firstProcessing.batchNo,
@@ -844,12 +868,15 @@ router.get('/report/completed', async (req, res) => {
       reports.push(report);
     }
 
-    // Calculate overall outturn (both standard and non-Natural)
+    // Calculate various outturns
     const overallOutturn = overallInputKgs > 0
       ? parseFloat(((overallOutputKgs / overallInputKgs) * 100).toFixed(2))
       : 0;
 
-    // Calculate overall outturn excluding Natural processing
+    const overallNaturalOutturn = overallNaturalInputKgs > 0
+      ? parseFloat(((overallNaturalOutputKgs / overallNaturalInputKgs) * 100).toFixed(2))
+      : 0;
+
     const overallNonNaturalOutturn = overallNonNaturalInputKgs > 0
       ? parseFloat(((overallNonNaturalOutputKgs / overallNonNaturalInputKgs) * 100).toFixed(2))
       : 0;
@@ -860,6 +887,9 @@ router.get('/report/completed', async (req, res) => {
         totalInputKgs: overallInputKgs,
         totalOutputKgs: overallOutputKgs,
         overallOutturn: overallOutturn,
+        totalNaturalInputKgs: overallNaturalInputKgs,
+        totalNaturalOutputKgs: overallNaturalOutputKgs,
+        overallNaturalOutturn: overallNaturalOutturn,
         totalNonNaturalInputKgs: overallNonNaturalInputKgs,
         totalNonNaturalOutputKgs: overallNonNaturalOutputKgs,
         overallNonNaturalOutturn: overallNonNaturalOutturn
