@@ -505,6 +505,7 @@ router.get('/report/detailed', async (req, res) => {
 });
 
 // GET endpoint for completed processing reports with accurate grouping by base batch number
+
 router.get('/report/completed', async (req, res) => {
   try {
     // FIRST QUERY: Get ALL processing records (regardless of status) to identify NATURAL batches
@@ -580,6 +581,11 @@ router.get('/report/completed', async (req, res) => {
     const reports = [];
 
     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
+      // Skip batch groups where not ALL processings are completed
+      if (!processings.every(p => p.status === 'COMPLETED')) {
+        continue;
+      }
+
       // Check if this batch prefix has any NATURAL processing (completed or not)
       const hasNaturalProcessing = batchesWithNatural.has(baseBatchNo);
       
@@ -747,6 +753,249 @@ router.get('/report/completed', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
+
+// router.get('/report/completed', async (req, res) => {
+//   try {
+//     // FIRST QUERY: Get ALL processing records (regardless of status) to identify NATURAL batches
+//     const allProcessingRecords = await prisma.processing.findMany({
+//       select: {
+//         batchNo: true,
+//         processingType: true
+//       }
+//     });
+    
+//     // Identify batch prefixes that have NATURAL processing (regardless of completion status)
+//     const batchesWithNatural = new Set();
+//     allProcessingRecords.forEach(processing => {
+//       const batchPrefix = processing.batchNo.substring(0, 9);
+//       if (processing.processingType === 'NATURAL') {
+//         batchesWithNatural.add(batchPrefix);
+//       }
+//     });
+
+//     // SECOND QUERY: Get all completed processing records
+//     const completedProcessings = await prisma.processing.findMany({
+//       where: {
+//         status: 'COMPLETED'
+//       },
+//       include: {
+//         cws: true,
+//         baggingOffs: {
+//           where: {
+//             status: 'COMPLETED'
+//           },
+//           include: {
+//             processing: true
+//           }
+//         }
+//       },
+//       orderBy: {
+//         endDate: 'desc'
+//       }
+//     });
+
+//     if (completedProcessings.length === 0) {
+//       return res.status(200).json({
+//         message: 'No completed processing records found',
+//         reports: []
+//       });
+//     }
+
+//     // Group processing records by their base batch number (first 9 characters)
+//     const groupedProcessings = {};
+
+//     // Track overall metrics
+//     let overallInputKgs = 0;
+//     let overallOutputKgs = 0;
+//     let overallNaturalInputKgs = 0;
+//     let overallNaturalOutputKgs = 0;
+//     let overallNonNaturalInputKgs = 0;
+//     let overallNonNaturalOutputKgs = 0;
+
+//     for (const processing of completedProcessings) {
+//       // Extract the base batch number (first 9 characters)
+//       const baseBatchNo = processing.batchNo.substring(0, 9);
+
+//       // Initialize group if it doesn't exist
+//       if (!groupedProcessings[baseBatchNo]) {
+//         groupedProcessings[baseBatchNo] = [];
+//       }
+
+//       // Add processing to its group
+//       groupedProcessings[baseBatchNo].push(processing);
+//     }
+
+//     // Generate reports for each batch group
+//     const reports = [];
+
+//     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
+//       // Check if this batch prefix has any NATURAL processing (completed or not)
+//       const hasNaturalProcessing = batchesWithNatural.has(baseBatchNo);
+      
+//       // Determine the predominant processing type if not natural
+//       let predominantProcessingType = 'UNKNOWN';
+//       if (!hasNaturalProcessing) {
+//         // Count occurrences of each processing type
+//         const typeCount = {};
+//         for (const processing of processings) {
+//           if (!typeCount[processing.processingType]) {
+//             typeCount[processing.processingType] = 0;
+//           }
+//           typeCount[processing.processingType]++;
+//         }
+
+//         // Find the most common type
+//         let maxCount = 0;
+//         for (const [type, count] of Object.entries(typeCount)) {
+//           if (count > maxCount) {
+//             maxCount = count;
+//             predominantProcessingType = type;
+//           }
+//         }
+//       }
+
+//       // Set the batch processing type (Natural takes precedence, otherwise use predominant type)
+//       const batchProcessingType = hasNaturalProcessing ? 'NATURAL' : predominantProcessingType;
+
+//       // Initialize metrics
+//       let totalInputKgs = 0;
+//       let totalOutputKgs = 0;
+//       const outputByType = {};
+//       const gradeBreakdown = {};
+//       const allBaggingOffRecords = [];
+
+//       // Combine data from all processing records in this group
+//       for (const processing of processings) {
+//         // Add input KGs
+//         const inputKgs = processing.totalKgs || 0;
+//         totalInputKgs += inputKgs;
+//         overallInputKgs += inputKgs;
+
+//         // Add to natural or non-natural inputs based on batch type
+//         if (hasNaturalProcessing) {
+//           overallNaturalInputKgs += inputKgs;
+//         } else {
+//           overallNonNaturalInputKgs += inputKgs;
+//         }
+
+//         // Process all bagging off records
+//         for (const record of processing.baggingOffs) {
+//           const outputKgs = parseFloat(record.totalOutputKgs) || 0;
+
+//           // Add output KGs by type
+//           if (!outputByType[record.processingType]) {
+//             outputByType[record.processingType] = 0;
+//           }
+//           outputByType[record.processingType] += outputKgs;
+
+//           // Add to total output
+//           totalOutputKgs += outputKgs;
+//           overallOutputKgs += outputKgs;
+
+//           // Add to natural or non-natural outputs based on batch type
+//           if (hasNaturalProcessing) {
+//             overallNaturalOutputKgs += outputKgs;
+//           } else {
+//             overallNonNaturalOutputKgs += outputKgs;
+//           }
+
+//           // Process grade breakdown
+//           if (typeof record.outputKgs === 'object' && record.outputKgs !== null) {
+//             Object.entries(record.outputKgs).forEach(([grade, kgs]) => {
+//               if (!gradeBreakdown[grade]) {
+//                 gradeBreakdown[grade] = 0;
+//               }
+//               gradeBreakdown[grade] += parseFloat(kgs) || 0;
+//             });
+//           }
+
+//           // Remove circular references
+//           const { baggingOffs, ...processingWithoutBaggingOffs } = record.processing;
+
+//           // Add enhanced record to the list
+//           allBaggingOffRecords.push({
+//             ...record,
+//             processingInfo: processingWithoutBaggingOffs
+//           });
+//         }
+//       }
+
+//       // Calculate outturn
+//       const outturn = totalInputKgs > 0 ? ((totalOutputKgs / totalInputKgs) * 100).toFixed(2) : 0;
+
+//       // Use the first processing for date and station info
+//       const firstProcessing = processings[0];
+
+//       // Create the report for this batch group
+//       const report = {
+//         batchInfo: {
+//           batchNo: baseBatchNo, // Use the base batch number
+//           relatedBatches: processings.map(p => p.batchNo), // List all related batch numbers
+//           station: firstProcessing.cws?.name || 'Unknown',
+//           processingType: batchProcessingType,
+//           startDate: firstProcessing.startDate,
+//           endDate: firstProcessing.endDate,
+//           status: firstProcessing.status,
+//           totalInputKgs: totalInputKgs,
+//           totalOutputKgs: totalOutputKgs,
+//           outturn: parseFloat(outturn),
+//           isNatural: hasNaturalProcessing, // Add a flag to clearly indicate NATURAL classification
+//           processingInfo: {
+//             id: firstProcessing.id,
+//             batchNo: firstProcessing.batchNo,
+//             processingType: batchProcessingType,
+//             totalKgs: totalInputKgs,
+//             grade: firstProcessing.grade,
+//             status: firstProcessing.status,
+//             notes: firstProcessing.notes
+//           }
+//         },
+//         metrics: {
+//           inputKgs: totalInputKgs,
+//           totalOutputKgs,
+//           outturn: parseFloat(outturn),
+//           outputByType,
+//           gradeBreakdown
+//         },
+//         baggingOffRecords: allBaggingOffRecords
+//       };
+
+//       reports.push(report);
+//     }
+
+//     // Calculate various outturns
+//     const overallOutturn = overallInputKgs > 0
+//       ? parseFloat(((overallOutputKgs / overallInputKgs) * 100).toFixed(2))
+//       : 0;
+
+//     const overallNaturalOutturn = overallNaturalInputKgs > 0
+//       ? parseFloat(((overallNaturalOutputKgs / overallNaturalInputKgs) * 100).toFixed(2))
+//       : 0;
+
+//     const overallNonNaturalOutturn = overallNonNaturalInputKgs > 0
+//       ? parseFloat(((overallNonNaturalOutputKgs / overallNonNaturalInputKgs) * 100).toFixed(2))
+//       : 0;
+
+//     return res.status(200).json({
+//       totalRecords: reports.length,
+//       overallMetrics: {
+//         totalInputKgs: overallInputKgs,
+//         totalOutputKgs: overallOutputKgs,
+//         overallOutturn: overallOutturn,
+//         totalNaturalInputKgs: overallNaturalInputKgs,
+//         totalNaturalOutputKgs: overallNaturalOutputKgs,
+//         overallNaturalOutturn: overallNaturalOutturn,
+//         totalNonNaturalInputKgs: overallNonNaturalInputKgs,
+//         totalNonNaturalOutputKgs: overallNonNaturalOutputKgs,
+//         overallNonNaturalOutturn: overallNonNaturalOutturn
+//       },
+//       reports
+//     });
+//   } catch (error) {
+//     console.error('Error generating completed processing reports:', error);
+//     return res.status(500).json({ error: error.message });
+//   }
+// });
 
 router.get('/report/summary', async (req, res) => {
   try {
