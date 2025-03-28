@@ -508,24 +508,42 @@ router.get('/report/detailed', async (req, res) => {
 
 router.get('/report/completed', async (req, res) => {
   try {
-    // FIRST QUERY: Get ALL processing records (regardless of status) to identify NATURAL batches
+    // FIRST QUERY: Get ALL processing records to track completion status
     const allProcessingRecords = await prisma.processing.findMany({
       select: {
         batchNo: true,
-        processingType: true
+        processingType: true,
+        status: true
       }
     });
     
-    // Identify batch prefixes that have NATURAL processing (regardless of completion status)
-    const batchesWithNatural = new Set();
+    // Group processing records by their base batch number
+    const processingStatusMap = {};
     allProcessingRecords.forEach(processing => {
       const batchPrefix = processing.batchNo.substring(0, 9);
-      if (processing.processingType === 'NATURAL') {
-        batchesWithNatural.add(batchPrefix);
+      
+      if (!processingStatusMap[batchPrefix]) {
+        processingStatusMap[batchPrefix] = {
+          hasNaturalProcessing: false,
+          allCompleted: true,
+          processingTypes: new Set()
+        };
       }
+
+      // Check if any processing is not completed
+      if (processing.status !== 'COMPLETED') {
+        processingStatusMap[batchPrefix].allCompleted = false;
+      }
+
+      // Track natural processing
+      if (processing.processingType === 'NATURAL') {
+        processingStatusMap[batchPrefix].hasNaturalProcessing = true;
+      }
+
+      processingStatusMap[batchPrefix].processingTypes.add(processing.processingType);
     });
 
-    // SECOND QUERY: Get all completed processing records
+    // SECOND QUERY: Get completed processing records
     const completedProcessings = await prisma.processing.findMany({
       where: {
         status: 'COMPLETED'
@@ -568,6 +586,11 @@ router.get('/report/completed', async (req, res) => {
       // Extract the base batch number (first 9 characters)
       const baseBatchNo = processing.batchNo.substring(0, 9);
 
+      // Only proceed if the entire batch group is completed
+      if (!processingStatusMap[baseBatchNo].allCompleted) {
+        continue;
+      }
+
       // Initialize group if it doesn't exist
       if (!groupedProcessings[baseBatchNo]) {
         groupedProcessings[baseBatchNo] = [];
@@ -581,34 +604,15 @@ router.get('/report/completed', async (req, res) => {
     const reports = [];
 
     for (const [baseBatchNo, processings] of Object.entries(groupedProcessings)) {
-      // Skip batch groups where not ALL processings are completed
-      if (!processings.every(p => p.status === 'COMPLETED')) {
-        continue;
-      }
-
-      // Check if this batch prefix has any NATURAL processing (completed or not)
-      const hasNaturalProcessing = batchesWithNatural.has(baseBatchNo);
+      // Retrieve the processing status and type information
+      const batchStatusInfo = processingStatusMap[baseBatchNo];
+      const hasNaturalProcessing = batchStatusInfo.hasNaturalProcessing;
       
       // Determine the predominant processing type if not natural
       let predominantProcessingType = 'UNKNOWN';
       if (!hasNaturalProcessing) {
-        // Count occurrences of each processing type
-        const typeCount = {};
-        for (const processing of processings) {
-          if (!typeCount[processing.processingType]) {
-            typeCount[processing.processingType] = 0;
-          }
-          typeCount[processing.processingType]++;
-        }
-
-        // Find the most common type
-        let maxCount = 0;
-        for (const [type, count] of Object.entries(typeCount)) {
-          if (count > maxCount) {
-            maxCount = count;
-            predominantProcessingType = type;
-          }
-        }
+        const processingTypes = Array.from(batchStatusInfo.processingTypes);
+        predominantProcessingType = processingTypes.length > 0 ? processingTypes[0] : 'UNKNOWN';
       }
 
       // Set the batch processing type (Natural takes precedence, otherwise use predominant type)
